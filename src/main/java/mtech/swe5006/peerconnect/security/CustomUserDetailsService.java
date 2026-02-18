@@ -1,7 +1,7 @@
 package mtech.swe5006.peerconnect.security;
 
-import mtech.swe5006.peerconnect.data.User;
-import mtech.swe5006.peerconnect.data.UserRepository;
+import mtech.swe5006.peerconnect.data.sql.User;
+import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
 

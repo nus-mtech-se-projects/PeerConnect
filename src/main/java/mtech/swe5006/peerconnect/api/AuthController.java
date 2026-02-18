@@ -1,7 +1,8 @@
 package mtech.swe5006.peerconnect.api;
 
-import mtech.swe5006.peerconnect.data.User;
-import mtech.swe5006.peerconnect.data.UserRepository;
+import mtech.swe5006.peerconnect.data.sql.User;
+import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.security.JwtService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -14,11 +15,14 @@ public class AuthController {
 
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
-
+  private final JwtService jwtService;
+  
   public AuthController(UserRepository userRepository,
-      PasswordEncoder passwordEncoder) {
+      PasswordEncoder passwordEncoder,
+      JwtService jwtService) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
+    this.jwtService = jwtService;
   }
 
   @PostMapping("/register")
@@ -42,15 +46,11 @@ public class AuthController {
 
     userRepository.save(user);
 
-    // UPDATED: getId() now exists and returns UUID
     return ResponseEntity.ok(Map.of(
         "id", user.getId().toString(),
         "email", user.getEmail()));
   }
 
-  // If you already have JWT login code, keep it—just use
-  // getEmail()/getPasswordHash().
-  // This is a minimal stub:
   @PostMapping("/login")
   public ResponseEntity<?> login(@RequestBody LoginRequest req) {
 
@@ -78,10 +78,13 @@ public class AuthController {
       return ResponseEntity.status(401).body(Map.of("error", "Invalid credentials"));
     }
 
+    String token = jwtService.generateAccessToken(user.getEmail());
     return ResponseEntity.ok(Map.of(
         "id", user.getId().toString(),
         "email", user.getEmail(),
-        "nusStudentId", user.getNusStudentId()));
+        "nusStudentId", user.getNusStudentId(),
+        "accessToken", token,
+        "expiresInSeconds", jwtService.expiresInSeconds()));
   }
 
   // Simple DTOs (records) to compile immediately
