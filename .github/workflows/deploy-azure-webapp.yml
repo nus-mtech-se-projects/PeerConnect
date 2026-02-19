@@ -34,14 +34,15 @@ jobs:
       - name: Build application
         run: ./gradlew clean build -x test
 
+      - name: Set up Snyk CLI
+        if: ${{ env.SNYK_TOKEN != '' }}
+        uses: snyk/actions/setup@master
+
       - name: Run Snyk dependency scan
         if: ${{ env.SNYK_TOKEN != '' }}
-        uses: snyk/actions/gradle@master
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
-        with:
-          command: test
-          args: --severity-threshold=high
+        run: snyk test --file=build.gradle --package-manager=gradle --severity-threshold=high
 
       - name: Skip Snyk scan when token is missing
         if: ${{ env.SNYK_TOKEN == '' }}
