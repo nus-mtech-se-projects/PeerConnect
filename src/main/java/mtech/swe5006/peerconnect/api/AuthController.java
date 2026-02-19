@@ -86,7 +86,54 @@ public class AuthController {
         "accessToken", token,
         "expiresInSeconds", jwtService.expiresInSeconds()));
   }
+@PostMapping("/microsoft")
+public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
+    String idToken = body.get("idToken");
+    if (idToken == null || idToken.isBlank()) {
+        return ResponseEntity.badRequest().body(Map.of("error", "idToken required"));
+    }
 
+    try {
+        com.nimbusds.jwt.SignedJWT jwt = com.nimbusds.jwt.SignedJWT.parse(idToken);
+        var claims = jwt.getJWTClaimsSet();
+
+        String email = claims.getStringClaim("preferred_username");
+        if (email == null) email = claims.getStringClaim("email");
+        String name = claims.getStringClaim("name");
+        String oid  = claims.getStringClaim("oid"); // unique MS user ID
+
+        if (email == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No email in token"));
+        }
+
+        final String resolvedEmail = email;
+        final String resolvedOid = oid;
+        final String resolvedName = name;
+
+        User user = userRepository.findByEmail(resolvedEmail).orElseGet(() -> {
+            User u = new User();
+            u.setEmail(resolvedEmail);
+            u.setPasswordHash("");           // no password for OAuth users
+            u.setNusStudentId("MS-" + resolvedOid); // unique placeholder
+            u.setFirstName(resolvedName != null ? resolvedName.split(" ")[0] : "");
+            u.setLastName(resolvedName != null && resolvedName.contains(" ")
+                ? resolvedName.split(" ", 2)[1] : "");
+            u.setUserType("student");
+            u.setStatus("active");
+            return userRepository.save(u);
+        });
+
+        String token = jwtService.generateAccessToken(user.getEmail());
+        return ResponseEntity.ok(Map.of(
+            "accessToken", token,
+            "email", user.getEmail(),
+            "expiresInSeconds", jwtService.expiresInSeconds()
+        ));
+
+    } catch (Exception e) {
+        return ResponseEntity.status(400).body(Map.of("error", "Invalid ID token: " + e.getMessage()));
+    }
+}
   // Simple DTOs (records) to compile immediately
   public record RegisterRequest(
       String nusStudentId,

@@ -12,7 +12,7 @@ public class User {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "nus_student_id", nullable = false, unique = true)
+    @Column(name = "nus_student_id", unique = true)
     private String nusStudentId;
 
     @Column(name = "first_name", nullable = false, length = 100)
