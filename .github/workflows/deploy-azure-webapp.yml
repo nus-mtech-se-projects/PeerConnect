@@ -9,6 +9,7 @@ on:
 env:
   JAVA_VERSION: '21'
   AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
 permissions:
   contents: read
@@ -32,6 +33,19 @@ jobs:
 
       - name: Build application
         run: ./gradlew clean build -x test
+
+      - name: Run Snyk dependency scan
+        if: ${{ env.SNYK_TOKEN != '' }}
+        uses: snyk/actions/gradle@master
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --severity-threshold=high
+
+      - name: Skip Snyk scan when token is missing
+        if: ${{ env.SNYK_TOKEN == '' }}
+        run: echo "SNYK_TOKEN is not configured; skipping Snyk scan."
 
       - name: Resolve artifact path
         id: artifact
