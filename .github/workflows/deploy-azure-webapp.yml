@@ -39,6 +39,16 @@ jobs:
           JAR_PATH=$(ls -1 build/libs/*.jar | grep -v -- '-plain.jar' | head -n 1)
           echo "jar_path=${JAR_PATH}" >> "$GITHUB_OUTPUT"
 
+      - name: Create deployment zip
+        id: deploypkg
+        run: |
+          mkdir -p deploy
+          cp "${{ steps.artifact.outputs.jar_path }}" deploy/app.jar
+          cd deploy
+          zip -r ../app.zip app.jar
+          cd ..
+          echo "package_path=${PWD}/app.zip" >> "$GITHUB_OUTPUT"
+
       - name: Validate Azure deployment configuration
         run: |
           if [ -z "${{ env.AZURE_WEBAPP_NAME }}" ]; then
@@ -57,8 +67,8 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@v2
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ${{ steps.artifact.outputs.jar_path }}
+          package: ${{ steps.deploypkg.outputs.package_path }}
