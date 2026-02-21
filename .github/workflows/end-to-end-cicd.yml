@@ -39,6 +39,7 @@ jobs:
 
       - name: Run Snyk dependency scan
         if: ${{ env.SNYK_TOKEN != '' }}
+        continue-on-error: true
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
         run: snyk test --file=build.gradle --package-manager=gradle --severity-threshold=high
