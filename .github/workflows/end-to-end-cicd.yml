@@ -1,5 +1,4 @@
-name: Deploy to Azure Web App
-
+name: End-to-End CI/CD Pipeline
 on:
   push:
     branches:
