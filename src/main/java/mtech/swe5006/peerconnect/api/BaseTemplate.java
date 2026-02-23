@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-import mtech.swe5006.peerconnect.data.mongo.MongoItem;
 import mtech.swe5006.peerconnect.dto.ItemRequest;
 public class BaseTemplate {
 
@@ -25,22 +24,22 @@ public class BaseTemplate {
 	}
 
 	@GetMapping("/{id}")
-	public ResponseEntity<MongoItem> getById(@PathVariable String id) {
+	public ResponseEntity<Object> getById(@PathVariable String id) {
 		return null;
 	}
 
 	@PostMapping
-	public ResponseEntity<MongoItem> create(@RequestBody ItemRequest request) {
+	public ResponseEntity<Object> create(@RequestBody ItemRequest request) {
 		return null;
 	}
 
 	@PutMapping("/{id}")
-	public ResponseEntity<MongoItem> replace(@PathVariable String id, @RequestBody ItemRequest request) {
+	public ResponseEntity<Object> replace(@PathVariable String id, @RequestBody ItemRequest request) {
 		return null;
 	}
 
 	@PatchMapping("/{id}")
-	public ResponseEntity<MongoItem> patch(@PathVariable String id, @RequestBody ItemRequest request) {
+	public ResponseEntity<Object> patch(@PathVariable String id, @RequestBody ItemRequest request) {
 		return null;
 	}
 }
