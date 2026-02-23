@@ -43,7 +43,7 @@ public class SecurityConfig {
   CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
     config.setAllowCredentials(true);
-    config.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:3000"));
+    config.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:3000", "https://salmon-island-0f8625f00.6.azurestaticapps.net"));
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("*"));
 
