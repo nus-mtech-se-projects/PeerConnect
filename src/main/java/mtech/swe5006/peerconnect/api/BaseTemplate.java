@@ -23,6 +23,11 @@ public class BaseTemplate {
 		return null;
 	}
 
+	@GetMapping("/test")
+	public String getTestVariable() {
+		return "test response";
+	}
+
 	@GetMapping("/{id}")
 	public ResponseEntity<Object> getById(@PathVariable String id) {
 		return null;

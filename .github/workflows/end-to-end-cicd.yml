@@ -1,0 +1,147 @@
+name: End-to-End CI/CD Pipeline
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '21'
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build application
+        run: ./gradlew clean build -x test
+
+      - name: Resolve artifact path
+        id: artifact
+        run: |
+          JAR_PATH=$(ls -1 build/libs/*.jar | grep -v -- '-plain.jar' | head -n 1)
+          echo "jar_path=${JAR_PATH}" >> "$GITHUB_OUTPUT"
+
+      - name: Create deployment zip
+        run: |
+          mkdir -p deploy
+          cp "${{ steps.artifact.outputs.jar_path }}" deploy/app.jar
+          cd deploy
+          zip -r ../app.zip app.jar
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-zip-${{ github.sha }}
+          path: app.zip
+          retention-days: 1
+
+  dependency-scan:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Snyk CLI
+        if: ${{ env.SNYK_TOKEN != '' }}
+        uses: snyk/actions/setup@master
+
+      - name: Run Snyk dependency scan
+        if: ${{ env.SNYK_TOKEN != '' }}
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+        run: snyk test --file=build.gradle --package-manager=gradle --severity-threshold=high
+
+      - name: Skip Snyk scan when token is missing
+        if: ${{ env.SNYK_TOKEN == '' }}
+        run: echo "SNYK_TOKEN is not configured; skipping Snyk scan."
+
+  docker-build:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: false
+          tags: ghcr.io/${{ github.repository_owner }}/peerconnect:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/peerconnect-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: peerconnect-image-${{ github.sha }}
+          path: /tmp/peerconnect-image.tar
+          retention-days: 1
+
+  deploy-azure:
+    needs:
+      - build
+      - dependency-scan
+      - docker-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download deployment artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-zip-${{ github.sha }}
+
+      - name: Validate Azure deployment configuration
+        run: |
+          if [ -z "${{ env.AZURE_WEBAPP_NAME }}" ]; then
+            echo "Missing repository variable: AZURE_WEBAPP_NAME"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
+            echo "Missing secret: AZURE_WEBAPP_PUBLISH_PROFILE"
+            exit 1
+          fi
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: app.zip
