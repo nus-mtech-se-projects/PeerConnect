@@ -1,0 +1,302 @@
+//////////////////////////////////////////////////////
+// USERS & AUTH (Azure SQL DDL aligned)
+//////////////////////////////////////////////////////
+
+Table users {
+  id uniqueidentifier [pk]
+  nus_student_id nvarchar(255) [note: "Unique when NOT NULL (filtered unique index in Azure SQL)"]
+  first_name nvarchar(255)
+  last_name nvarchar(255)
+  email nvarchar(255) [unique]
+  phone nvarchar(20)
+  password_hash nvarchar(255)
+  user_type varchar(20) [note: "student/admin (default student)"]
+  status varchar(20) [note: "active/suspended/deleted (default active)"]
+  created_at datetime2
+  updated_at datetime2
+
+  indexes {
+    (nus_student_id) [unique, note: "Filtered unique in Azure SQL when NOT NULL"]
+  }
+}
+
+Table profiles {
+  user_id uniqueidentifier [pk, ref: > users.id]
+  faculty nvarchar(100)
+  major nvarchar(100)
+  year_of_study tinyint
+  bio nvarchar(max)
+  avatar_url nvarchar(500)
+}
+
+Table password_resets {
+  id uniqueidentifier [pk]
+  user_id uniqueidentifier [ref: > users.id]
+  token nvarchar(128)
+  expiry datetime2
+  created_at datetime2
+  used_at datetime2
+
+  indexes {
+    (user_id, expiry) [name: "IX_password_resets_user_expiry"]
+  }
+}
+
+//////////////////////////////////////////////////////
+// OPTIONAL: TUTOR PROFILE (capability/status)
+//////////////////////////////////////////////////////
+
+Table tutor_profiles {
+  user_id uniqueidentifier [pk, ref: > users.id]
+  is_active bit
+  is_approved bit
+  approved_by uniqueidentifier [ref: > users.id]
+  approved_at datetime2
+  tutor_bio nvarchar(max)
+  created_at datetime2
+
+  indexes {
+    (is_active, is_approved, created_at) [name: "IX_tutor_profiles_approval"]
+  }
+}
+
+//////////////////////////////////////////////////////
+// BLOCKING (NO ACTION to avoid multiple cascade paths)
+//////////////////////////////////////////////////////
+
+Table user_blocks {
+  blocker_id uniqueidentifier [ref: > users.id, note: "ON DELETE NO ACTION"]
+  blocked_id uniqueidentifier [ref: > users.id, note: "ON DELETE NO ACTION"]
+  created_at datetime2
+
+  indexes {
+    (blocker_id, blocked_id) [pk]
+  }
+}
+
+//////////////////////////////////////////////////////
+// COURSES & ENROLLMENTS
+//////////////////////////////////////////////////////
+
+Table courses {
+  id uniqueidentifier [pk]
+  course_code nvarchar(20) [unique]
+  course_name nvarchar(200)
+  faculty nvarchar(100)
+}
+
+Table enrollments {
+  user_id uniqueidentifier [ref: > users.id]
+  course_id uniqueidentifier [ref: > courses.id]
+
+  indexes {
+    (user_id, course_id) [pk]
+    (course_id) [name: "IX_enrollments_course_id"]
+  }
+}
+
+//////////////////////////////////////////////////////
+// STUDY GROUPS
+//////////////////////////////////////////////////////
+
+Table study_groups {
+  id uniqueidentifier [pk]
+  course_id uniqueidentifier [ref: > courses.id]
+  topic nvarchar(200)
+  study_mode varchar(20) [note: "online/in_person"]
+  location nvarchar(200)
+  created_by uniqueidentifier [ref: > users.id]
+  max_members smallint
+  status varchar(20) [note: "active/cancelled/completed"]
+  created_at datetime2
+
+  indexes {
+    (course_id, status, study_mode, created_at) [name: "IX_study_groups_discovery"]
+  }
+}
+
+Table group_members {
+  group_id uniqueidentifier [ref: > study_groups.id]
+  user_id uniqueidentifier [ref: > users.id]
+  role varchar(20) [note: "admin/member"]
+  joined_at datetime2
+
+  indexes {
+    (group_id, user_id) [pk]
+    (user_id, group_id) [name: "IX_group_members_user"]
+  }
+}
+
+Table study_sessions {
+  id uniqueidentifier [pk]
+  group_id uniqueidentifier [ref: > study_groups.id]
+  scheduled_at datetime2
+  status varchar(20) [note: "scheduled/cancelled/completed"]
+  created_at datetime2
+
+  indexes {
+    (group_id, scheduled_at) [name: "IX_study_sessions_upcoming"]
+  }
+}
+
+Table group_messages {
+  id uniqueidentifier [pk]
+  group_id uniqueidentifier [ref: > study_groups.id]
+  sender_id uniqueidentifier [ref: > users.id]
+  message nvarchar(max)
+  created_at datetime2
+
+  indexes {
+    (group_id, created_at) [name: "IX_group_messages_timeline"]
+  }
+}
+
+//////////////////////////////////////////////////////
+// NOTIFICATIONS
+//////////////////////////////////////////////////////
+
+Table notifications {
+  id uniqueidentifier [pk]
+  user_id uniqueidentifier [ref: > users.id]
+  notif_type nvarchar(50)
+  ref_id uniqueidentifier
+  is_read bit
+  created_at datetime2
+  read_at datetime2
+
+  indexes {
+    (user_id, is_read, created_at) [name: "IX_notifications_unread"]
+  }
+}
+
+//////////////////////////////////////////////////////
+// PEER FEEDBACK
+//////////////////////////////////////////////////////
+
+Table peer_feedback {
+  id uniqueidentifier [pk]
+  from_user uniqueidentifier [ref: > users.id]
+  to_user uniqueidentifier [ref: > users.id]
+  punctuality tinyint
+  hands_on tinyint
+  explanation_quality tinyint
+  documentation tinyint
+  communication tinyint
+  created_at datetime2
+
+  indexes {
+    (to_user, created_at) [name: "IX_peer_feedback_to_user_date"]
+  }
+}
+
+//////////////////////////////////////////////////////
+// PEER TUTORING
+//////////////////////////////////////////////////////
+
+Table tutoring_courses {
+  id uniqueidentifier [pk]
+  tutor_id uniqueidentifier [ref: > users.id, note: "Tutor capability via tutor_profiles (app logic)"]
+  title nvarchar(200)
+  description nvarchar(max)
+  status varchar(20) [note: "active/paused/archived"]
+  created_at datetime2
+
+  indexes {
+    (tutor_id, created_at) [name: "IX_tutoring_courses_tutor"]
+  }
+}
+
+Table tutoring_signups {
+  id uniqueidentifier [pk]
+  course_id uniqueidentifier [ref: > tutoring_courses.id]
+  student_id uniqueidentifier [ref: > users.id]
+  status varchar(20) [note: "enrolled/cancelled/completed"]
+  created_at datetime2
+
+  indexes {
+    (student_id, created_at) [name: "IX_tutoring_signups_student"]
+  }
+}
+
+Table tutoring_sessions {
+  id uniqueidentifier [pk]
+  course_id uniqueidentifier [ref: > tutoring_courses.id]
+  meeting_link nvarchar(500)
+  recording_url nvarchar(500)
+  session_time datetime2
+  status nvarchar(20) [note: "scheduled/cancelled/completed"]
+  created_at datetime2
+}
+
+//////////////////////////////////////////////////////
+// AI TUTOR (EXTENDS SIGN UP)
+//////////////////////////////////////////////////////
+
+Table ai_conversations {
+  id uniqueidentifier [pk]
+  signup_id uniqueidentifier [ref: > tutoring_signups.id]
+  created_at datetime2
+  closed_at datetime2
+
+  indexes {
+    (signup_id, created_at) [name: "IX_ai_conversations_signup"]
+  }
+}
+
+Table ai_messages {
+  id uniqueidentifier [pk]
+  conversation_id uniqueidentifier [ref: > ai_conversations.id]
+  role varchar(20) [note: "user/assistant/system"]
+  content nvarchar(max)
+  token_count int
+  created_at datetime2
+
+  indexes {
+    (conversation_id, created_at) [name: "IX_ai_messages_timeline"]
+  }
+}
+
+//////////////////////////////////////////////////////
+// WELL-BEING SUPPORT
+//////////////////////////////////////////////////////
+
+Table support_resources {
+  id uniqueidentifier [pk]
+  title nvarchar(200)
+  description nvarchar(max)
+  url nvarchar(500)
+  support_type nvarchar(50) [note: "article/hotline/counseling/website/other"]
+  is_official bit
+  created_at datetime2
+}
+
+//////////////////////////////////////////////////////
+// AUDIT LOGS
+//////////////////////////////////////////////////////
+
+Table audit_logs {
+  id uniqueidentifier [pk]
+  user_id uniqueidentifier [ref: > users.id]
+  action nvarchar(50)
+  entity nvarchar(50)
+  entity_id uniqueidentifier
+  ip_address nvarchar(45)
+  user_agent nvarchar(300)
+  created_at datetime2
+
+  indexes {
+    (entity, entity_id, created_at) [name: "IX_audit_logs_entity"]
+    (user_id, created_at) [name: "IX_audit_logs_user_date"]
+  }
+}
+
+-- Fast lookup for login by email
+CREATE INDEX IX_users_email_status
+ON dbo.[users](email, status)
+INCLUDE (password_hash, user_type, nus_student_id);
+GO
+-- Fast lookup for login by nus_student_id
+CREATE INDEX IX_users_nus_student_id_status
+ON dbo.[users](nus_student_id, status)
+INCLUDE (password_hash, user_type, email)
+WHERE nus_student_id IS NOT NULL;
