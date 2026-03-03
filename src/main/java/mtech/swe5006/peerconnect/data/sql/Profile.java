@@ -23,8 +23,11 @@ public class Profile {
     @Column(name = "bio", columnDefinition = "nvarchar(max)")
     private String bio;
 
-    @Column(name = "avatar_url", length = 500)
+    @Column(name = "avatar_url", length = 2048)
     private String avatarUrl;
+
+    @Column(name = "full_time_ind", length = 1)
+    private String fullTimeInd;
 
     // ===== Getters / Setters =====
 
@@ -45,4 +48,7 @@ public class Profile {
 
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+
+    public String getFullTimeInd() { return fullTimeInd; }
+    public void setFullTimeInd(String fullTimeInd) { this.fullTimeInd = fullTimeInd; }
 }
