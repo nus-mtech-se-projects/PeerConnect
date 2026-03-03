@@ -31,7 +31,7 @@ public class JwtService {
 
   public JwtService(
       @Value("${app.jwt.secret}") String secret,
-      @Value("${app.jwt.access-token-minutes:15}") long accessTokenMinutes
+      @Value("${app.jwt.access.token.minutes:15}") long accessTokenMinutes
   ) {
     this.algorithm = Algorithm.HMAC256(secret);
     this.verifier = JWT.require(this.algorithm).build();
