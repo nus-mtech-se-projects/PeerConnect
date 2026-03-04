@@ -38,6 +38,8 @@ out/
 ### VS Code ###
 .vscode/
 
-
 ### Resources ###
 **/src/main/resources/application.properties
+
+### Postman UAT Artifacts ###
+my-artifacts/
