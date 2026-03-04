@@ -23,13 +23,13 @@ jobs:
           fetch-depth: 0  # Full history required for blame/new code detection
 
       - name: Start SonarQube
-        run: docker run -d \
-              --name peerconnect-sonar \
-              -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
-              --ulimit nofile=65536:65536 \
-              -p 9000:9000 \
-              sonarqube:community
-
+        run: |
+          docker run -d \
+            --name peerconnect-sonar \
+            -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
+            --ulimit nofile=65536:65536 \
+            -p 9000:9000 \
+            sonarqube:community
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -51,12 +51,11 @@ jobs:
             fi
             if [ "$i" -eq 40 ]; then
               echo "SonarQube failed to start in time — printing logs"
-              docker compose -f .github/workflows/docker-compose.yml logs
+              docker logs peerconnect-sonar
               exit 1
             fi
             sleep 15
           done
-
       - name: Configure SonarQube admin and generate token
         id: sonar-token
         run: |
@@ -65,18 +64,15 @@ jobs:
             -X POST "http://localhost:9000/api/users/change_password" \
             -d "login=admin&previousPassword=admin&password=Admin@SonarCI1!")
           echo "Password change HTTP status: $HTTP_CODE"
-
           # Generate a scoped project analysis token for this run
           TOKEN=$(curl -s -u admin:Admin@SonarCI1! \
             -X POST "http://localhost:9000/api/user_tokens/generate" \
             -d "name=ci-run-${{ github.run_id }}" | jq -r '.token')
-
           if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
             echo "Failed to generate SonarQube token"
             exit 1
           fi
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
       - name: Build and run tests
         run: ./gradlew clean test
 
@@ -88,24 +84,19 @@ jobs:
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }} \
             -Dsonar.projectName="PeerConnect" \
             -Dsonar.java.source=21
-
       - name: Check SonarQube Quality Gate
         run: |
           echo "Waiting for analysis to be processed..."
           sleep 20
-
           RESPONSE=$(curl -s -u admin:Admin@SonarCI1! \
             "http://localhost:9000/api/qualitygates/project_status?projectKey=${{ env.SONAR_PROJECT_KEY }}")
           echo "$RESPONSE" | jq .
-
           STATUS=$(echo "$RESPONSE" | jq -r '.projectStatus.status')
           echo "Quality Gate status: $STATUS"
-
           if [ "$STATUS" = "ERROR" ]; then
             echo "Quality Gate FAILED — code does not meet quality/security standards"
             exit 1
           fi
-
       - name: Export critical and blocker issues
         if: always()
         run: |
@@ -114,7 +105,6 @@ jobs:
             | jq '.' > sonar-issues.json
           echo "Issues found:"
           jq '.total' sonar-issues.json
-
       - name: Upload SonarQube report
         if: always()
         uses: actions/upload-artifact@v4
@@ -125,4 +115,6 @@ jobs:
 
       - name: Stop SonarQube
         if: always()
-        run: docker compose -f .github/workflows/docker-compose.yml down -v
+        run: |
+          docker stop peerconnect-sonar || true
+          docker rm peerconnect-sonar || true
