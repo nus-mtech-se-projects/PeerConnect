@@ -80,7 +80,7 @@ jobs:
         run: |
           ./gradlew sonar \
             -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
-            -Dsonar.token=${{ steps.sonar-token.outputs.token }} \
+            -Dsonar.login=${{ steps.sonar-token.outputs.token }} \
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }} \
             -Dsonar.projectName="PeerConnect" \
             -Dsonar.java.source=21
