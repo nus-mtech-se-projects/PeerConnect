@@ -1,0 +1,83 @@
+name: Postman UAT Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Target environment base URL (overrides default)'
+        required: false
+        default: ''
+  workflow_run:
+    workflows: ["End-to-End CI/CD Pipeline"]
+    types: [completed]
+    branches: [main]
+
+env:
+  BASE_URL: ${{ github.event.inputs.base_url || vars.AZURE_WEBAPP_URL }}
+
+jobs:
+  postman-uat:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Newman and HTML reporter
+        run: npm install -g newman newman-reporter-htmlextra
+
+      - name: Validate target URL
+        run: |
+          if [ -z "${{ env.BASE_URL }}" ]; then
+            echo "No target URL provided. Set the AZURE_WEBAPP_URL repository variable or pass base_url as an input."
+            exit 1
+          fi
+          echo "Running UAT against: ${{ env.BASE_URL }}"
+
+      - name: Wait for application to be reachable
+        run: |
+          echo "Checking application is reachable via POST /api/auth/login ..."
+          for i in $(seq 1 12); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X POST -H "Content-Type: application/json" \
+              -d '{}' \
+              "${{ env.BASE_URL }}/api/auth/login" || echo "000")
+            echo "Attempt $i: HTTP $HTTP_CODE"
+            # 400 = app is up and returning validation errors (expected for empty body)
+            if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "200" ]; then
+              echo "Application is reachable"
+              break
+            fi
+            if [ "$i" -eq 12 ]; then
+              echo "Application did not respond in time — aborting UAT"
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Run Postman collection
+        run: |
+          newman run postman/PeerConnect.postman_collection.json \
+            --environment postman/PeerConnect.postman_environment.json \
+            --env-var "baseUrl=${{ env.BASE_URL }}" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export postman-uat-report.html \
+            --reporter-htmlextra-title "PeerConnect UAT Report" \
+            --timeout-request 30000 \
+            --timeout-script 10000
+
+      - name: Upload UAT report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-uat-report-${{ github.run_id }}
+          path: postman-uat-report.html
+          retention-days: 30

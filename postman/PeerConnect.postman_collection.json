@@ -1,0 +1,387 @@
+{
+  "info": {
+    "_postman_id": "d1011c41-7df8-4605-aecd-3b2bd117a7cb",
+    "name": "PeerConnect",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "25558532"
+  },
+  "item": [
+    {
+      "name": "Register",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"200 on successful registration\", () => {\r",
+              "  pm.response.to.have.status(200);\r",
+              "});\r",
+              "pm.test(\"Returns UUID id\", () => {\r",
+              "  pm.expect(pm.response.json().id).to.match(\r",
+              "    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\r",
+              "  );\r",
+              "});\r",
+              "pm.test(\"Returns correct email\", () => {\r",
+              "  pm.expect(pm.response.json().email).to.eql(pm.environment.get(\"runEmail\"));\r",
+              "});\r",
+              "pm.test(\"Password not exposed\", () => {\r",
+              "  const body = pm.response.json();\r",
+              "  pm.expect(body).to.not.have.property(\"password\");\r",
+              "  pm.expect(body).to.not.have.property(\"passwordHash\");\r",
+              "});\r",
+              "\r",
+              "// Duplicate email check\r",
+              "pm.test(\"409 on duplicate email\", (done) => {\r",
+              "  pm.sendRequest({\r",
+              "    url: pm.environment.get(\"baseUrl\") + \"/api/auth/register\",\r",
+              "    method: \"POST\",\r",
+              "    header: { \"Content-Type\": \"application/json\" },\r",
+              "    body: {\r",
+              "      mode: \"raw\",\r",
+              "      raw: JSON.stringify({\r",
+              "        nusStudentId: \"A9999999Z\",\r",
+              "        firstName: \"Dupe\", lastName: \"Email\",\r",
+              "        email: pm.environment.get(\"runEmail\"),\r",
+              "        phone: \"98000000\",\r",
+              "        password: pm.environment.get(\"testPassword\")\r",
+              "      })\r",
+              "    }\r",
+              "  }, (err, res) => {\r",
+              "    pm.expect(res).to.have.status(409);\r",
+              "    pm.expect(res.json().error).to.eql(\"Email already registered\");\r",
+              "    done();\r",
+              "  });\r",
+              "});\r",
+              "\r",
+              "// Duplicate NUS ID check\r",
+              "pm.test(\"409 on duplicate NUS Student ID\", (done) => {\r",
+              "  pm.sendRequest({\r",
+              "    url: pm.environment.get(\"baseUrl\") + \"/api/auth/register\",\r",
+              "    method: \"POST\",\r",
+              "    header: { \"Content-Type\": \"application/json\" },\r",
+              "    body: {\r",
+              "      mode: \"raw\",\r",
+              "      raw: JSON.stringify({\r",
+              "        nusStudentId: pm.environment.get(\"runNusId\"),\r",
+              "        firstName: \"Dupe\", lastName: \"NusId\",\r",
+              "        email: \"unique-\" + Date.now() + \"@u.nus.edu.sg\",\r",
+              "        phone: \"98000001\",\r",
+              "        password: pm.environment.get(\"testPassword\")\r",
+              "      })\r",
+              "    }\r",
+              "  }, (err, res) => {\r",
+              "    pm.expect(res).to.have.status(409);\r",
+              "    pm.expect(res.json().error).to.eql(\"NUS Student ID already registered\");\r",
+              "    done();\r",
+              "  });\r",
+              "});\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate unique identifiers per run\r",
+              "pm.environment.set(\"runEmail\", \"test-\" + Date.now() + \"@u.nus.edu.sg\");\r",
+              "pm.environment.set(\"runNusId\", \"T\" + Date.now().toString().slice(-7) + \"X\");"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nusStudentId\": \"{{runNusId}}\",\r\n  \"firstName\": \"Test\",\r\n  \"lastName\": \"User\",\r\n  \"email\": \"{{runEmail}}\",\r\n  \"phone\": \"91234567\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Login with Email",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"200 on login with email\", () => {\r",
+              "  pm.response.to.have.status(200);\r",
+              "});\r",
+              "pm.test(\"Returns accessToken and fields\", () => {\r",
+              "  const b = pm.response.json();\r",
+              "  pm.expect(b.accessToken).to.be.a(\"string\").and.have.length.above(10);\r",
+              "  pm.expect(b.id).to.be.a(\"string\");\r",
+              "  pm.expect(b.expiresInSeconds).to.be.a(\"number\").and.above(0);\r",
+              "  pm.environment.set(\"authToken\", b.accessToken);\r",
+              "});\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"email\": \"{{runEmail}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Login with NUS Student ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Login with NUS ID succeeds\", () => {\r",
+              "  pm.response.to.have.status(200);\r",
+              "});\r",
+              "pm.test(\"Returns nusStudentId in response\", () => {\r",
+              "  pm.expect(pm.response.json().nusStudentId).to.eql(pm.environment.get(\"testNusId\"));\r",
+              "});\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"nusStudentId\": \"{{testNusId}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Login Invalid Credentails",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Rejects bad password with 401\", () => {\r",
+              "  pm.response.to.have.status(401);\r",
+              "});\r",
+              "pm.test(\"Error message returned\", () => {\r",
+              "  pm.expect(pm.response.json().error).to.eql(\"Invalid credentials\");\r",
+              "});\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"email\": \"{{testEmail}}\",\r\n  \"password\": \"WrongPassword!\"\r\n}\r\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Login Validation (both fields / neither)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Rejects ambiguous login with 400\", () => {\r",
+              "  pm.response.to.have.status(400);\r",
+              "});\r",
+              "pm.test(\"Correct error message\", () => {\r",
+              "  pm.expect(pm.response.json().error).to.include(\"exactly one\");\r",
+              "});\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"email\": \"{{testEmail}}\",\r\n  \"nusStudentId\": \"{{testNusId}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Microsoft OAuth Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const msIdToken = pm.environment.get(\"msIdToken\");\r",
+              "\r",
+              "if (!msIdToken) {\r",
+              "  pm.test(\"Microsoft login skipped — no msIdToken configured\", () => {\r",
+              "    pm.expect(true).to.be.true;\r",
+              "  });\r",
+              "} else {\r",
+              "  pm.test(\"Microsoft login succeeds\", () => {\r",
+              "    pm.response.to.have.status(200);\r",
+              "  });\r",
+              "  pm.test(\"Returns access token\", () => {\r",
+              "    const body = pm.response.json();\r",
+              "    pm.expect(body.accessToken).to.be.a(\"string\");\r",
+              "    pm.environment.set(\"authToken\", body.accessToken);\r",
+              "  });\r",
+              "}\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"idToken\": \"{{msIdToken}}\"\r\n}\r\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/microsoft",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "microsoft"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
