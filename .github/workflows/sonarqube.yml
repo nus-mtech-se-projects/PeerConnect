@@ -29,7 +29,7 @@ jobs:
             -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
             --ulimit nofile=65536:65536 \
             -p 9000:9000 \
-            sonarqube:community
+            sonarqube:25-community
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
