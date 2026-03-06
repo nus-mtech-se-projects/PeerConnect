@@ -266,4 +266,100 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
   public record ForgotPasswordRequest(String email, String nusStudentId) {}
   public record ResetPasswordRequest(String email, String nusStudentId, String code, String newPassword) {}
+
+  // ── Change Password (authenticated): request code ────────────────────────
+
+  @PostMapping("/change-password/request")
+  public ResponseEntity<?> changePasswordRequest(
+      @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+    String email = extractEmailFromAuth(authHeader);
+    if (email == null) {
+      return ResponseEntity.status(401).body("Authentication required.");
+    }
+
+    User user = userRepository.findByEmail(email).orElse(null);
+    if (user == null) {
+      return ResponseEntity.badRequest().body("User not found.");
+    }
+
+    // Generate a 6-digit code
+    String code = String.format("%06d", RANDOM.nextInt(1_000_000));
+
+    // Store token
+    PasswordResetToken token = new PasswordResetToken();
+    token.setUserId(user.getId());
+    token.setToken(code);
+    token.setExpiry(LocalDateTime.now().plusMinutes(15));
+    resetTokenRepository.save(token);
+
+    // Send email
+    emailService.sendChangePasswordCode(user.getEmail(), code);
+
+    return ResponseEntity.ok(Map.of("message", "Verification code sent to your email."));
+  }
+
+  // ── Change Password (authenticated): confirm with code ───────────────────
+
+  @PostMapping("/change-password/confirm")
+  public ResponseEntity<?> changePasswordConfirm(
+      @RequestBody ChangePasswordRequest req,
+      @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+    String email = extractEmailFromAuth(authHeader);
+    if (email == null) {
+      return ResponseEntity.status(401).body("Authentication required.");
+    }
+
+    String code = req.code();
+    String newPassword = req.newPassword();
+
+    if (code == null || code.isBlank()) {
+      return ResponseEntity.badRequest().body("Verification code is required.");
+    }
+    if (newPassword == null || newPassword.length() < 6) {
+      return ResponseEntity.badRequest().body("Password must be at least 6 characters.");
+    }
+
+    User user = userRepository.findByEmail(email).orElse(null);
+    if (user == null) {
+      return ResponseEntity.badRequest().body("User not found.");
+    }
+
+    // Find valid token
+    var tokenOpt = resetTokenRepository
+        .findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
+            user.getId(), code.trim(), LocalDateTime.now());
+
+    if (tokenOpt.isEmpty()) {
+      return ResponseEntity.badRequest().body("Invalid or expired code.");
+    }
+
+    // Mark ALL unused tokens for this user as used
+    var allUnused = resetTokenRepository.findByUserIdAndUsedAtIsNull(user.getId());
+    LocalDateTime now = LocalDateTime.now();
+    allUnused.forEach(t -> t.setUsedAt(now));
+    resetTokenRepository.saveAll(allUnused);
+
+    // Update password
+    user.setPasswordHash(passwordEncoder.encode(newPassword));
+    userRepository.save(user);
+
+    return ResponseEntity.ok(Map.of("message", "Password changed successfully."));
+  }
+
+  // ── Helper: extract email from JWT Authorization header ───────────────────
+
+  private String extractEmailFromAuth(String authHeader) {
+    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+      return null;
+    }
+    String token = authHeader.substring(7);
+    if (!jwtService.isValid(token)) {
+      return null;
+    }
+    return jwtService.extractUsername(token);
+  }
+
+  public record ChangePasswordRequest(String code, String newPassword) {}
 }
