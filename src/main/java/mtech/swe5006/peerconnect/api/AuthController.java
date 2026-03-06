@@ -91,13 +91,7 @@ public class AuthController {
       return ResponseEntity.status(401).body(Map.of("error", "Invalid credentials"));
     }
 
-    // Invalidate all unused password-reset tokens for this user
-    var unusedTokens = resetTokenRepository.findByUserIdAndUsedAtIsNull(user.getId());
-    if (!unusedTokens.isEmpty()) {
-      LocalDateTime now = LocalDateTime.now();
-      unusedTokens.forEach(t -> t.setUsedAt(now));
-      resetTokenRepository.saveAll(unusedTokens);
-    }
+    invalidateUnusedTokens(user);
 
     String token = jwtService.generateAccessToken(user.getEmail());
     return ResponseEntity.ok(Map.of(
@@ -175,36 +169,18 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
   @PostMapping("/forgot-password")
   public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest req) {
-    String email = req.email();
-    String nusStudentId = req.nusStudentId();
-
-    boolean hasEmail = email != null && !email.isBlank();
-    boolean hasNusId = nusStudentId != null && !nusStudentId.isBlank();
-
-    if (!hasEmail && !hasNusId) {
+    if ((req.email() == null || req.email().isBlank())
+        && (req.nusStudentId() == null || req.nusStudentId().isBlank())) {
       return ResponseEntity.badRequest().body("Provide email or NUS Student ID.");
     }
 
-    User user = hasEmail
-        ? userRepository.findByEmail(email.trim()).orElse(null)
-        : userRepository.findByNusStudentId(nusStudentId.trim()).orElse(null);
-
+    User user = resolveUser(req.email(), req.nusStudentId());
     if (user == null) {
       return ResponseEntity.badRequest().body(
           "Account does not exist. Please verify the email or NUS Student ID.");
     }
 
-    // Generate a 6-digit code
-    String code = String.format("%06d", RANDOM.nextInt(1_000_000));
-
-    // Store token
-    PasswordResetToken token = new PasswordResetToken();
-    token.setUserId(user.getId());
-    token.setToken(code);
-    token.setExpiry(LocalDateTime.now().plusMinutes(15));
-    resetTokenRepository.save(token);
-
-    // Send email
+    String code = generateAndStoreVerificationCode(user);
     emailService.sendResetCode(user.getEmail(), code);
 
     return ResponseEntity.ok(Map.of("message", "If the account exists, a code has been sent."));
@@ -214,54 +190,18 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
   @PostMapping("/reset-password")
   public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest req) {
-    String email = req.email();
-    String nusStudentId = req.nusStudentId();
-    String code = req.code();
-    String newPassword = req.newPassword();
-
-    if (code == null || code.isBlank()) {
-      return ResponseEntity.badRequest().body("Verification code is required.");
-    }
-    if (newPassword == null || newPassword.length() < 6) {
-      return ResponseEntity.badRequest().body("Password must be at least 6 characters.");
-    }
-
-    boolean hasEmail = email != null && !email.isBlank();
-    boolean hasNusId = nusStudentId != null && !nusStudentId.isBlank();
-
-    if (!hasEmail && !hasNusId) {
+    if ((req.email() == null || req.email().isBlank())
+        && (req.nusStudentId() == null || req.nusStudentId().isBlank())) {
       return ResponseEntity.badRequest().body("Provide email or NUS Student ID.");
     }
 
-    // Resolve user
-    User user = hasEmail
-        ? userRepository.findByEmail(email.trim()).orElse(null)
-        : userRepository.findByNusStudentId(nusStudentId.trim()).orElse(null);
-
+    User user = resolveUser(req.email(), req.nusStudentId());
     if (user == null) {
       return ResponseEntity.badRequest().body("Invalid request.");
     }
 
-    // Find valid token
-    var tokenOpt = resetTokenRepository
-        .findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
-            user.getId(), code.trim(), LocalDateTime.now());
-
-    if (tokenOpt.isEmpty()) {
-      return ResponseEntity.badRequest().body("Invalid or expired code.");
-    }
-
-    // Mark ALL unused tokens for this user as used
-    var allUnused = resetTokenRepository.findByUserIdAndUsedAtIsNull(user.getId());
-    LocalDateTime now = LocalDateTime.now();
-    allUnused.forEach(t -> t.setUsedAt(now));
-    resetTokenRepository.saveAll(allUnused);
-
-    // Update password
-    user.setPasswordHash(passwordEncoder.encode(newPassword));
-    userRepository.save(user);
-
-    return ResponseEntity.ok(Map.of("message", "Password reset successfully."));
+    return verifyCodeAndUpdatePassword(user, req.code(), req.newPassword(),
+        "Password reset successfully.");
   }
 
   public record ForgotPasswordRequest(String email, String nusStudentId) {}
@@ -283,17 +223,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
       return ResponseEntity.badRequest().body("User not found.");
     }
 
-    // Generate a 6-digit code
-    String code = String.format("%06d", RANDOM.nextInt(1_000_000));
-
-    // Store token
-    PasswordResetToken token = new PasswordResetToken();
-    token.setUserId(user.getId());
-    token.setToken(code);
-    token.setExpiry(LocalDateTime.now().plusMinutes(15));
-    resetTokenRepository.save(token);
-
-    // Send email
+    String code = generateAndStoreVerificationCode(user);
     emailService.sendChangePasswordCode(user.getEmail(), code);
 
     return ResponseEntity.ok(Map.of("message", "Verification code sent to your email."));
@@ -311,45 +241,69 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
       return ResponseEntity.status(401).body("Authentication required.");
     }
 
-    String code = req.code();
-    String newPassword = req.newPassword();
+    User user = userRepository.findByEmail(email).orElse(null);
+    if (user == null) {
+      return ResponseEntity.badRequest().body("User not found.");
+    }
 
+    return verifyCodeAndUpdatePassword(user, req.code(), req.newPassword(),
+        "Password changed successfully.");
+  }
+
+  // ── Private helpers (eliminate duplication) ────────────────────────────────
+
+  /** Resolve a user by email (preferred) or NUS Student ID. */
+  private User resolveUser(String email, String nusStudentId) {
+    boolean hasEmail = email != null && !email.isBlank();
+    boolean hasNusId = nusStudentId != null && !nusStudentId.isBlank();
+    if (hasEmail) return userRepository.findByEmail(email.trim()).orElse(null);
+    if (hasNusId) return userRepository.findByNusStudentId(nusStudentId.trim()).orElse(null);
+    return null;
+  }
+
+  /** Generate a 6-digit code, persist it as a PasswordResetToken, and return the code. */
+  private String generateAndStoreVerificationCode(User user) {
+    String code = String.format("%06d", RANDOM.nextInt(1_000_000));
+    PasswordResetToken prt = new PasswordResetToken();
+    prt.setUserId(user.getId());
+    prt.setToken(code);
+    prt.setExpiry(LocalDateTime.now().plusMinutes(15));
+    resetTokenRepository.save(prt);
+    return code;
+  }
+
+  /** Mark every unused reset-token for the given user as used. */
+  private void invalidateUnusedTokens(User user) {
+    var unusedTokens = resetTokenRepository.findByUserIdAndUsedAtIsNull(user.getId());
+    if (!unusedTokens.isEmpty()) {
+      LocalDateTime now = LocalDateTime.now();
+      unusedTokens.forEach(t -> t.setUsedAt(now));
+      resetTokenRepository.saveAll(unusedTokens);
+    }
+  }
+
+  /** Validate code & password, verify the token, invalidate all tokens, and update the password. */
+  private ResponseEntity<?> verifyCodeAndUpdatePassword(
+      User user, String code, String newPassword, String successMessage) {
     if (code == null || code.isBlank()) {
       return ResponseEntity.badRequest().body("Verification code is required.");
     }
     if (newPassword == null || newPassword.length() < 6) {
       return ResponseEntity.badRequest().body("Password must be at least 6 characters.");
     }
-
-    User user = userRepository.findByEmail(email).orElse(null);
-    if (user == null) {
-      return ResponseEntity.badRequest().body("User not found.");
-    }
-
-    // Find valid token
     var tokenOpt = resetTokenRepository
         .findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
             user.getId(), code.trim(), LocalDateTime.now());
-
     if (tokenOpt.isEmpty()) {
       return ResponseEntity.badRequest().body("Invalid or expired code.");
     }
-
-    // Mark ALL unused tokens for this user as used
-    var allUnused = resetTokenRepository.findByUserIdAndUsedAtIsNull(user.getId());
-    LocalDateTime now = LocalDateTime.now();
-    allUnused.forEach(t -> t.setUsedAt(now));
-    resetTokenRepository.saveAll(allUnused);
-
-    // Update password
+    invalidateUnusedTokens(user);
     user.setPasswordHash(passwordEncoder.encode(newPassword));
     userRepository.save(user);
-
-    return ResponseEntity.ok(Map.of("message", "Password changed successfully."));
+    return ResponseEntity.ok(Map.of("message", successMessage));
   }
 
-  // ── Helper: extract email from JWT Authorization header ───────────────────
-
+  /** Extract email from JWT Authorization header. */
   private String extractEmailFromAuth(String authHeader) {
     if (authHeader == null || !authHeader.startsWith("Bearer ")) {
       return null;
