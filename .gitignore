@@ -40,4 +40,5 @@ out/
 
 
 ### Resources ###
-**/src/main/resources/application.properties
+**/my-artifacts
+**/src/main/resources
