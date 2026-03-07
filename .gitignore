@@ -39,7 +39,5 @@ out/
 .vscode/
 
 ### Resources ###
-**/src/main/resources/application.properties
-
-### Postman UAT Artifacts ###
-my-artifacts/
+**/my-artifacts
+**/src/main/resources
