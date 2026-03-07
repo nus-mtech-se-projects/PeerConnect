@@ -74,4 +74,4 @@ jobs:
         with:
           name: postman-uat-report-${{ github.run_id }}
           path: postman-uat-report.html
-          retention-days: 30
+          retention-days: 7

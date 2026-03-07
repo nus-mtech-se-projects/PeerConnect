@@ -92,4 +92,4 @@ jobs:
             report_html.html
             report_json.json
             report_md.md
-          retention-days: 30
+          retention-days: 7
