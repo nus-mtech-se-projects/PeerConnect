@@ -1,8 +1,10 @@
 package mtech.swe5006.peerconnect;
 
+import mtech.swe5006.peerconnect.data.sql.PasswordResetTokenRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import mtech.swe5006.peerconnect.security.JwtService;
+import mtech.swe5006.peerconnect.service.EmailService;
 import mtech.swe5006.peerconnect.api.AuthController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,7 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
+import mtech.swe5006.peerconnect.data.sql.PasswordResetToken;
+import mtech.swe5006.peerconnect.data.sql.PasswordResetTokenRepository;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.MACSigner;
@@ -42,6 +45,13 @@ class AuthControllerTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private JwtService jwtService;
+    @Mock
+    private PasswordResetTokenRepository resetTokenRepository;
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private PasswordResetTokenRepository resetTokenRepository;
 
     @InjectMocks
     private AuthController controller;
