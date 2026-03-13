@@ -2,11 +2,16 @@ package mtech.swe5006.peerconnect.api;
 
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.data.sql.PasswordResetToken;
+import mtech.swe5006.peerconnect.data.sql.PasswordResetTokenRepository;
 import mtech.swe5006.peerconnect.security.JwtService;
+import mtech.swe5006.peerconnect.service.EmailService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @RestController
@@ -16,13 +21,21 @@ public class AuthController {
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtService jwtService;
+  private final PasswordResetTokenRepository resetTokenRepository;
+  private final EmailService emailService;
   
+  private static final SecureRandom RANDOM = new SecureRandom();
+
   public AuthController(UserRepository userRepository,
       PasswordEncoder passwordEncoder,
-      JwtService jwtService) {
+      JwtService jwtService,
+      PasswordResetTokenRepository resetTokenRepository,
+      EmailService emailService) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
+    this.resetTokenRepository = resetTokenRepository;
+    this.emailService = emailService;
   }
 
   @PostMapping("/register")
@@ -77,6 +90,8 @@ public class AuthController {
     if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
       return ResponseEntity.status(401).body(Map.of("error", "Invalid credentials"));
     }
+
+    invalidateUnusedTokens(user);
 
     String token = jwtService.generateAccessToken(user.getEmail());
     return ResponseEntity.ok(Map.of(
@@ -149,4 +164,156 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
       String nusStudentId,
       String password) {
   }
+
+  // ── Forgot Password: generate code & email it ────────────────────────────
+
+  @PostMapping("/forgot-password")
+  public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest req) {
+    if ((req.email() == null || req.email().isBlank())
+        && (req.nusStudentId() == null || req.nusStudentId().isBlank())) {
+      return ResponseEntity.badRequest().body("Provide email or NUS Student ID.");
+    }
+
+    User user = resolveUser(req.email(), req.nusStudentId());
+    if (user == null) {
+      return ResponseEntity.badRequest().body(
+          "Account does not exist. Please verify the email or NUS Student ID.");
+    }
+
+    String code = generateAndStoreVerificationCode(user);
+    emailService.sendResetCode(user.getEmail(), code);
+
+    return ResponseEntity.ok(Map.of("message", "If the account exists, a code has been sent."));
+  }
+
+  // ── Reset Password: verify code & update password ────────────────────────
+
+  @PostMapping("/reset-password")
+  public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest req) {
+    if ((req.email() == null || req.email().isBlank())
+        && (req.nusStudentId() == null || req.nusStudentId().isBlank())) {
+      return ResponseEntity.badRequest().body("Provide email or NUS Student ID.");
+    }
+
+    User user = resolveUser(req.email(), req.nusStudentId());
+    if (user == null) {
+      return ResponseEntity.badRequest().body("Invalid request.");
+    }
+
+    return verifyCodeAndUpdatePassword(user, req.code(), req.newPassword(),
+        "Password reset successfully.");
+  }
+
+  public record ForgotPasswordRequest(String email, String nusStudentId) {}
+  public record ResetPasswordRequest(String email, String nusStudentId, String code, String newPassword) {}
+
+  // ── Change Password (authenticated): request code ────────────────────────
+
+  @PostMapping("/change-password/request")
+  public ResponseEntity<?> changePasswordRequest(
+      @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+    String email = extractEmailFromAuth(authHeader);
+    if (email == null) {
+      return ResponseEntity.status(401).body("Authentication required.");
+    }
+
+    User user = userRepository.findByEmail(email).orElse(null);
+    if (user == null) {
+      return ResponseEntity.badRequest().body("User not found.");
+    }
+
+    String code = generateAndStoreVerificationCode(user);
+    emailService.sendChangePasswordCode(user.getEmail(), code);
+
+    return ResponseEntity.ok(Map.of("message", "Verification code sent to your email."));
+  }
+
+  // ── Change Password (authenticated): confirm with code ───────────────────
+
+  @PostMapping("/change-password/confirm")
+  public ResponseEntity<?> changePasswordConfirm(
+      @RequestBody ChangePasswordRequest req,
+      @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+    String email = extractEmailFromAuth(authHeader);
+    if (email == null) {
+      return ResponseEntity.status(401).body("Authentication required.");
+    }
+
+    User user = userRepository.findByEmail(email).orElse(null);
+    if (user == null) {
+      return ResponseEntity.badRequest().body("User not found.");
+    }
+
+    return verifyCodeAndUpdatePassword(user, req.code(), req.newPassword(),
+        "Password changed successfully.");
+  }
+
+  // ── Private helpers (eliminate duplication) ────────────────────────────────
+
+  /** Resolve a user by email (preferred) or NUS Student ID. */
+  private User resolveUser(String email, String nusStudentId) {
+    boolean hasEmail = email != null && !email.isBlank();
+    boolean hasNusId = nusStudentId != null && !nusStudentId.isBlank();
+    if (hasEmail) return userRepository.findByEmail(email.trim()).orElse(null);
+    if (hasNusId) return userRepository.findByNusStudentId(nusStudentId.trim()).orElse(null);
+    return null;
+  }
+
+  /** Generate a 6-digit code, persist it as a PasswordResetToken, and return the code. */
+  private String generateAndStoreVerificationCode(User user) {
+    String code = String.format("%06d", RANDOM.nextInt(1_000_000));
+    PasswordResetToken prt = new PasswordResetToken();
+    prt.setUserId(user.getId());
+    prt.setToken(code);
+    prt.setExpiry(LocalDateTime.now().plusMinutes(15));
+    resetTokenRepository.save(prt);
+    return code;
+  }
+
+  /** Mark every unused reset-token for the given user as used. */
+  private void invalidateUnusedTokens(User user) {
+    var unusedTokens = resetTokenRepository.findByUserIdAndUsedAtIsNull(user.getId());
+    if (!unusedTokens.isEmpty()) {
+      LocalDateTime now = LocalDateTime.now();
+      unusedTokens.forEach(t -> t.setUsedAt(now));
+      resetTokenRepository.saveAll(unusedTokens);
+    }
+  }
+
+  /** Validate code & password, verify the token, invalidate all tokens, and update the password. */
+  private ResponseEntity<?> verifyCodeAndUpdatePassword(
+      User user, String code, String newPassword, String successMessage) {
+    if (code == null || code.isBlank()) {
+      return ResponseEntity.badRequest().body("Verification code is required.");
+    }
+    if (newPassword == null || newPassword.length() < 6) {
+      return ResponseEntity.badRequest().body("Password must be at least 6 characters.");
+    }
+    var tokenOpt = resetTokenRepository
+        .findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
+            user.getId(), code.trim(), LocalDateTime.now());
+    if (tokenOpt.isEmpty()) {
+      return ResponseEntity.badRequest().body("Invalid or expired code.");
+    }
+    invalidateUnusedTokens(user);
+    user.setPasswordHash(passwordEncoder.encode(newPassword));
+    userRepository.save(user);
+    return ResponseEntity.ok(Map.of("message", successMessage));
+  }
+
+  /** Extract email from JWT Authorization header. */
+  private String extractEmailFromAuth(String authHeader) {
+    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+      return null;
+    }
+    String token = authHeader.substring(7);
+    if (!jwtService.isValid(token)) {
+      return null;
+    }
+    return jwtService.extractUsername(token);
+  }
+
+  public record ChangePasswordRequest(String code, String newPassword) {}
 }

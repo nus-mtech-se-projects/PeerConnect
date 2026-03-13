@@ -12,6 +12,7 @@ build/
 .factorypath
 .project
 .settings
+*.settings
 .springBeans
 .sts4-cache
 bin/
@@ -39,4 +40,5 @@ out/
 
 
 ### Resources ###
-**/src/main/resources/application.properties
+**/my-artifacts
+**/src/main/resources
