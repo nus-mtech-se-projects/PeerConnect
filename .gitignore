@@ -38,7 +38,6 @@ out/
 ### VS Code ###
 .vscode/
 
-
 ### Resources ###
 **/my-artifacts
 **/src/main/resources
