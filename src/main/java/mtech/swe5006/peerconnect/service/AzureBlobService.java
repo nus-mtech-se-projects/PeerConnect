@@ -15,10 +15,18 @@ import java.io.IOException;
 public class AzureBlobService {
 
     private final BlobContainerClient containerClient;
+    private final boolean enabled;
 
     public AzureBlobService(
+            @Value("${azure.storage.enabled:false}") boolean enabled,
             @Value("${azure.storage.connection_string}") String connectionString,
             @Value("${azure.storage.container_name:avatars}") String containerName) {
+
+        this.enabled = enabled;
+        if (!enabled) {
+            this.containerClient = null;
+            return;
+        }
 
         BlobServiceClient serviceClient = new BlobServiceClientBuilder()
                 .connectionString(connectionString)
@@ -40,6 +48,9 @@ public class AzureBlobService {
      * @return the public URL of the uploaded blob
      */
     public String upload(String blobName, MultipartFile file) throws IOException {
+        if (!enabled || containerClient == null) {
+            throw new IllegalStateException("Azure storage is disabled");
+        }
         BlobClient blobClient = containerClient.getBlobClient(blobName);
 
         // Set content type so the blob is served correctly in browsers
@@ -56,6 +67,9 @@ public class AzureBlobService {
      * Delete a blob if it exists.
      */
     public void delete(String blobName) {
+        if (!enabled || containerClient == null) {
+            return;
+        }
         BlobClient blobClient = containerClient.getBlobClient(blobName);
         blobClient.deleteIfExists();
     }
