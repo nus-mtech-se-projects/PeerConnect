@@ -1,17 +1,8 @@
 name: Trigger auto deployment for peerconnect-app
 
-# When this action will be executed
+# Disabled - ACR (ca5accbde616acr) was deleted; deployment is handled by end-to-end-cicd.yml
 on:
-  # Automatically trigger it when detected changes in repo
-  push:
-    branches: 
-      [ main ]
-    paths:
-    - '**'
-    - '.github/workflows/peerconnect-app-AutoDeployTrigger-413ea04d-9bba-49b9-a2de-8d355429f273.yml'
-
-  # Allow manual trigger 
-  workflow_dispatch:      
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
