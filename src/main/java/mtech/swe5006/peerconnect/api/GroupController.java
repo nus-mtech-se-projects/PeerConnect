@@ -388,7 +388,12 @@ public class GroupController {
 
         groupMemberRepository.deleteByGroupIdAndUserId(id, userId);
         refreshGroupStatus(group);
-        groupRepository.save(group);
+        try {
+            groupRepository.save(group);
+        } catch (Exception ex) {
+            log.error("[RemoveMember] DB error for group {}: {}", id, ex.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to update group status: " + ex.getMessage()));
+        }
         return ResponseEntity.ok(Map.of("removed", true));
     }
 
@@ -431,7 +436,7 @@ public class GroupController {
         if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can dissolve group"));
 
         try {
-            jdbcTemplate.update("UPDATE study_groups SET status = 'dissolved' WHERE id = ?", group.getId());
+            jdbcTemplate.update("UPDATE study_groups SET status = 'dissolved' WHERE id = ?", group.getId().toString());
         } catch (Exception ex) {
             log.error("[Dissolve] DB error for group {}: {}", id, ex.getMessage());
             return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group: " + ex.getMessage()));
@@ -487,7 +492,12 @@ public class GroupController {
         session.setLocation(location);
         session.setMeetingLink(meetingLink);
         session.setCreatedBy(actor.getId());
-        studySessionRepository.save(session);
+        try {
+            studySessionRepository.save(session);
+        } catch (Exception ex) {
+            log.error("[CreateSession] DB error for group {}: {}", id, ex.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to save session: " + ex.getMessage()));
+        }
 
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("id", session.getId().toString());
