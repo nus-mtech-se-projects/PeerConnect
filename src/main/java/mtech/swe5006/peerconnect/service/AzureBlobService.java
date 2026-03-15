@@ -5,6 +5,8 @@ import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.models.BlobHttpHeaders;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +16,8 @@ import java.io.IOException;
 @Service
 public class AzureBlobService {
 
+    private static final Logger log = LoggerFactory.getLogger(AzureBlobService.class);
+
     private final BlobContainerClient containerClient;
     private final boolean enabled;
 
@@ -22,22 +26,32 @@ public class AzureBlobService {
             @Value("${azure.storage.connection_string}") String connectionString,
             @Value("${azure.storage.container_name:avatars}") String containerName) {
 
-        this.enabled = enabled;
-        if (!enabled) {
-            this.containerClient = null;
-            return;
+        BlobContainerClient resolvedContainerClient = null;
+        boolean resolvedEnabled = false;
+        boolean hasConnectionString = connectionString != null && !connectionString.isBlank();
+        if (!hasConnectionString) {
+            if (enabled) {
+                log.warn("Azure storage is enabled but no connection string is configured. Disabling blob integration.");
+            }
+        } else {
+            try {
+                BlobServiceClient serviceClient = new BlobServiceClientBuilder()
+                        .connectionString(connectionString)
+                        .buildClient();
+
+                resolvedContainerClient = serviceClient.getBlobContainerClient(containerName);
+
+                if (!resolvedContainerClient.exists()) {
+                    resolvedContainerClient.create();
+                }
+                resolvedEnabled = true;
+            } catch (IllegalArgumentException ex) {
+                log.warn("Azure storage connection string is invalid. Disabling blob integration.", ex);
+            }
         }
 
-        BlobServiceClient serviceClient = new BlobServiceClientBuilder()
-                .connectionString(connectionString)
-                .buildClient();
-
-        this.containerClient = serviceClient.getBlobContainerClient(containerName);
-
-        // Create the container if it doesn't exist
-        if (!containerClient.exists()) {
-            containerClient.create();
-        }
+        this.containerClient = resolvedContainerClient;
+        this.enabled = resolvedEnabled;
     }
 
     /**
