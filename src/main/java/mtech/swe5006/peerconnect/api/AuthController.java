@@ -6,6 +6,8 @@ import mtech.swe5006.peerconnect.data.sql.PasswordResetToken;
 import mtech.swe5006.peerconnect.data.sql.PasswordResetTokenRepository;
 import mtech.swe5006.peerconnect.security.JwtService;
 import mtech.swe5006.peerconnect.service.EmailService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+  private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
@@ -129,7 +133,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
             User u = new User();
             u.setEmail(resolvedEmail);
             u.setPasswordHash("");           // no password for OAuth users
-            u.setNusStudentId("MS-" + resolvedOid); // unique placeholder
+            if (resolvedOid != null) u.setNusStudentId("MS-" + resolvedOid);
             u.setFirstName(resolvedName != null ? resolvedName.split(" ")[0] : "");
             u.setLastName(resolvedName != null && resolvedName.contains(" ")
                 ? resolvedName.split(" ", 2)[1] : "");
@@ -146,7 +150,8 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
         ));
 
     } catch (Exception e) {
-        return ResponseEntity.status(400).body(Map.of("error", "Invalid ID token: " + e.getMessage()));
+        log.error("[MicrosoftLogin] Failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+        return ResponseEntity.status(400).body(Map.of("error", "Invalid ID token: " + e.getClass().getSimpleName() + ": " + e.getMessage()));
     }
 }
   // Simple DTOs (records) to compile immediately

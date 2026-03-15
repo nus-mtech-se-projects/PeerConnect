@@ -1727,6 +1727,41 @@
                 }
               },
               "response": []
+            },
+            {
+              "name": "Cleanup: Dissolve Main Test Group",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Cleanup succeeded\", () => {",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.environment.set(\"groupId\", \"\");",
+                      "pm.environment.set(\"sessionId\", \"\");",
+                      "pm.environment.set(\"dissolveGroupId\", \"\");",
+                      "pm.environment.set(\"authToken2\", \"\");",
+                      "pm.environment.set(\"userId2\", \"\");"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/dissolve",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "groups", "{{groupId}}", "dissolve"]
+                }
+              },
+              "response": []
             }
           ]
         }
