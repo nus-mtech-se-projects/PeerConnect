@@ -21,8 +21,8 @@ public class AzureBlobService {
     private final BlobContainerClient containerClient;
     private final boolean enabled;
 
-    public AzureBlobService(
-        @Value("${azure.storage.enabled:false}") boolean enabled,
+        public AzureBlobService(
+            @Value("${azure.storage.enabled:false}") boolean enabled,
             @Value("${azure.storage.connection_string}") String connectionString,
             @Value("${azure.storage.container_name:avatars}") String containerName) {
 
