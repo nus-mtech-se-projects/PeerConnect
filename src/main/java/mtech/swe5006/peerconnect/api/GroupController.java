@@ -430,8 +430,12 @@ public class GroupController {
         if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
         if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can dissolve group"));
 
-        group.setStatus("dissolved");
-        groupRepository.save(group);
+        try {
+            jdbcTemplate.update("UPDATE study_groups SET status = 'dissolved' WHERE id = ?", group.getId());
+        } catch (Exception ex) {
+            log.error("[Dissolve] DB error for group {}: {}", id, ex.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group: " + ex.getMessage()));
+        }
         return ResponseEntity.ok(Map.of("dissolved", true));
     }
 
@@ -485,7 +489,17 @@ public class GroupController {
         session.setCreatedBy(actor.getId());
         studySessionRepository.save(session);
 
-        return ResponseEntity.ok(session);
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("id", session.getId().toString());
+        resp.put("groupId", session.getGroupId().toString());
+        resp.put("title", session.getTitle());
+        resp.put("notes", session.getNotes() != null ? session.getNotes() : "");
+        resp.put("startsAt", session.getStartsAt().toString());
+        resp.put("endsAt", session.getEndsAt() != null ? session.getEndsAt().toString() : null);
+        resp.put("location", session.getLocation() != null ? session.getLocation() : "");
+        resp.put("meetingLink", session.getMeetingLink() != null ? session.getMeetingLink() : "");
+        resp.put("createdBy", session.getCreatedBy().toString());
+        return ResponseEntity.ok(resp);
     }
 
     @PutMapping("/{id}/sessions/{sessionId}")
@@ -519,7 +533,18 @@ public class GroupController {
         session.setStartsAt(startsAt);
         session.setEndsAt(endsAt);
         studySessionRepository.save(session);
-        return ResponseEntity.ok(session);
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("id", session.getId().toString());
+        resp.put("groupId", session.getGroupId().toString());
+        resp.put("title", session.getTitle());
+        resp.put("notes", session.getNotes() != null ? session.getNotes() : "");
+        resp.put("startsAt", session.getStartsAt().toString());
+        resp.put("endsAt", session.getEndsAt() != null ? session.getEndsAt().toString() : null);
+        resp.put("location", session.getLocation() != null ? session.getLocation() : "");
+        resp.put("meetingLink", session.getMeetingLink() != null ? session.getMeetingLink() : "");
+        resp.put("createdBy", session.getCreatedBy().toString());
+        return ResponseEntity.ok(resp);
     }
 
     @DeleteMapping("/{id}/sessions/{sessionId}")

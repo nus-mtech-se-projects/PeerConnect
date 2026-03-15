@@ -19,7 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import mtech.swe5006.peerconnect.data.sql.PasswordResetToken;
-import mtech.swe5006.peerconnect.data.sql.PasswordResetTokenRepository;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.MACSigner;
@@ -49,9 +48,6 @@ class AuthControllerTest {
     private PasswordResetTokenRepository resetTokenRepository;
     @Mock
     private EmailService emailService;
-
-    @Mock
-    private PasswordResetTokenRepository resetTokenRepository;
 
     @InjectMocks
     private AuthController controller;

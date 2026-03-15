@@ -1,6 +1,7 @@
 package mtech.swe5006.peerconnect.data.sql;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,6 +13,8 @@ public interface StudyGroupMemberRepository extends JpaRepository<StudyGroupMemb
     Optional<StudyGroupMember> findByGroupIdAndUserId(UUID groupId, UUID userId);
     long countByGroupIdAndMembershipStatus(UUID groupId, String membershipStatus);
     long countByGroupId(UUID groupId);
+    @Transactional
     void deleteByGroupId(UUID groupId);
+    @Transactional
     void deleteByGroupIdAndUserId(UUID groupId, UUID userId);
 }
