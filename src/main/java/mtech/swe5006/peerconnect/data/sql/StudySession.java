@@ -24,10 +24,10 @@ public class StudySession {
     @Column(name = "notes", length = 2000)
     private String notes;
 
-    @Column(name = "starts_at", nullable = false, columnDefinition = "TIMESTAMP")
+    @Column(name = "starts_at", nullable = false, columnDefinition = "DATETIME2")
     private LocalDateTime startsAt;
 
-    @Column(name = "ends_at", columnDefinition = "TIMESTAMP")
+    @Column(name = "ends_at", columnDefinition = "DATETIME2")
     private LocalDateTime endsAt;
 
     @Column(name = "location", length = 200)
@@ -39,7 +39,7 @@ public class StudySession {
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
-    @Column(name = "created_at", columnDefinition = "TIMESTAMP")
+    @Column(name = "created_at", columnDefinition = "DATETIME2")
     private LocalDateTime createdAt;
 
     @PrePersist

@@ -254,10 +254,10 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
   /** Resolve a user by email (preferred) or NUS Student ID. */
   private User resolveUser(String email, String nusStudentId) {
-    boolean hasEmail = email != null && !email.isBlank();
-    boolean hasNusId = nusStudentId != null && !nusStudentId.isBlank();
-    if (hasEmail) return userRepository.findByEmail(email.trim()).orElse(null);
-    if (hasNusId) return userRepository.findByNusStudentId(nusStudentId.trim()).orElse(null);
+    if (email != null && !email.isBlank())
+      return userRepository.findByEmail(email.trim()).orElse(null);
+    if (nusStudentId != null && !nusStudentId.isBlank())
+      return userRepository.findByNusStudentId(nusStudentId.trim()).orElse(null);
     return null;
   }
 

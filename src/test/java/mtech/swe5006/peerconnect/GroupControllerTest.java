@@ -5,6 +5,7 @@ import mtech.swe5006.peerconnect.data.sql.StudyGroup;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMember;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMemberRepository;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupRepository;
+import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 
 import java.time.LocalDateTime;
@@ -36,6 +38,10 @@ class GroupControllerTest {
     StudyGroupMemberRepository memberRepository;
     @Mock
     UserRepository userRepository;
+    @Mock
+    StudySessionRepository studySessionRepository;
+    @Mock
+    JdbcTemplate jdbcTemplate;
 
     @InjectMocks
     GroupController controller;
@@ -61,9 +67,15 @@ class GroupControllerTest {
         @Test
         void ownerMembershipAdded() {
             Map<String,Object> body = new HashMap<>();
-            body.put("name","Test group");
+            body.put("name", "Test group");
+            body.put("moduleCode", "CS5000");
+            body.put("description", "A test group");
+            body.put("preferredSchedule", "Weekends");
+            body.put("meetingLink", "https://zoom.us/test");
             when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(alice));
             when(groupRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(memberRepository.findByGroupId(any())).thenReturn(Collections.emptyList());
+            when(studySessionRepository.findByGroupIdOrderByStartsAtAsc(any())).thenReturn(Collections.emptyList());
 
             ResponseEntity<?> res = controller.createGroup(authFor(alice), body);
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
@@ -95,19 +107,23 @@ class GroupControllerTest {
 
         @Test
         void join_and_capacity_enforced() {
-            when(memberRepository.findByGroupIdAndUserId(groupId, alice.getId())).thenReturn(Optional.empty());
-            ResponseEntity<?> res = controller.joinGroup(authFor(alice), groupId);
+            StudyGroupMember existing = new StudyGroupMember();
+            existing.setMembershipStatus("approved");
+            when(memberRepository.findByGroupIdAndUserId(groupId, alice.getId()))
+                    .thenReturn(Optional.empty())
+                    .thenReturn(Optional.of(existing));
+
+            ResponseEntity<?> res = controller.joinGroup(groupId, authFor(alice));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
 
-            // already member
-            when(memberRepository.findByGroupIdAndUserId(groupId, alice.getId())).thenReturn(Optional.of(new StudyGroupMember()));
-            res = controller.joinGroup(authFor(alice), groupId);
-            assertThat(res.getStatusCode().is4xxClientError()).isTrue();
+            // already member — controller returns 200 with alreadyJoined:true
+            res = controller.joinGroup(groupId, authFor(alice));
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
         }
 
         @Test
         void leaveGroup() {
-            ResponseEntity<?> res = controller.leaveGroup(authFor(alice), groupId);
+            ResponseEntity<?> res = controller.leaveGroup(groupId, authFor(alice));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
         }
     }

@@ -54,7 +54,7 @@ public class StudyGroup {
     @Column(name = "approval_required")
     private Boolean approvalRequired;
 
-    @Column(name = "created_at", columnDefinition = "TIMESTAMP")
+    @Column(name = "created_at", columnDefinition = "DATETIME2")
     private LocalDateTime createdAt;
 
     @PrePersist
