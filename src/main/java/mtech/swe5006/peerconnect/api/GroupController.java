@@ -453,7 +453,7 @@ public class GroupController {
         if (!isMember(id, actor.getId()) && !isAdmin(group, actor.getId())) {
             return ResponseEntity.status(403).body(Map.of("error", "Not authorized to view sessions"));
         }
-        return ResponseEntity.ok(studySessionRepository.findByGroupIdOrderByStartsAtAsc(id));
+        return ResponseEntity.ok(getSessionsPayload(id));
     }
 
     @PostMapping("/{id}/sessions")
@@ -718,8 +718,24 @@ public class GroupController {
     private Map<String, Object> buildGroupDetails(StudyGroup group, User currentUser) {
         Map<String, Object> details = new LinkedHashMap<>(buildGroupSummary(group, currentUser));
         details.put("members", getMembersPayload(group.getId()));
-        details.put("sessions", studySessionRepository.findByGroupIdOrderByStartsAtAsc(group.getId()));
+        details.put("sessions", getSessionsPayload(group.getId()));
         return details;
+    }
+
+    private List<Map<String, Object>> getSessionsPayload(UUID groupId) {
+        return studySessionRepository.findByGroupIdOrderByStartsAtAsc(groupId).stream().map(s -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", s.getId().toString());
+            row.put("groupId", s.getGroupId().toString());
+            row.put("title", s.getTitle());
+            row.put("notes", s.getNotes() != null ? s.getNotes() : "");
+            row.put("startsAt", s.getStartsAt() != null ? s.getStartsAt().toString() : null);
+            row.put("endsAt", s.getEndsAt() != null ? s.getEndsAt().toString() : null);
+            row.put("location", s.getLocation() != null ? s.getLocation() : "");
+            row.put("meetingLink", s.getMeetingLink() != null ? s.getMeetingLink() : "");
+            row.put("createdBy", s.getCreatedBy().toString());
+            return row;
+        }).toList();
     }
 
     private List<Map<String, Object>> getMembersPayload(UUID groupId) {
