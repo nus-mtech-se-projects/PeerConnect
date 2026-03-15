@@ -151,7 +151,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
     } catch (Exception e) {
         log.error("[MicrosoftLogin] Failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
-        return ResponseEntity.status(400).body(Map.of("error", "Invalid ID token: " + e.getClass().getSimpleName() + ": " + e.getMessage()));
+        return ResponseEntity.status(400).body(Map.of("error", "Microsoft login failed. Please try again."));
     }
 }
   // Simple DTOs (records) to compile immediately

@@ -392,7 +392,7 @@ public class GroupController {
             groupRepository.save(group);
         } catch (Exception ex) {
             log.error("[RemoveMember] DB error for group {}: {}", id, ex.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to update group status: " + ex.getMessage()));
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to remove member. Please try again."));
         }
         return ResponseEntity.ok(Map.of("removed", true));
     }
@@ -439,7 +439,7 @@ public class GroupController {
             jdbcTemplate.update("UPDATE study_groups SET status = 'dissolved' WHERE id = ?", group.getId().toString());
         } catch (Exception ex) {
             log.error("[Dissolve] DB error for group {}: {}", id, ex.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group: " + ex.getMessage()));
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group. Please try again."));
         }
         return ResponseEntity.ok(Map.of("dissolved", true));
     }
@@ -496,7 +496,7 @@ public class GroupController {
             studySessionRepository.save(session);
         } catch (Exception ex) {
             log.error("[CreateSession] DB error for group {}: {}", id, ex.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to save session: " + ex.getMessage()));
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to save session. Please try again."));
         }
 
         Map<String, Object> resp = new LinkedHashMap<>();
