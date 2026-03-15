@@ -444,6 +444,25 @@ public class GroupController {
         return ResponseEntity.ok(Map.of("dissolved", true));
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteGroup(@PathVariable UUID id, Authentication auth) {
+        User actor = getCurrentUser(auth);
+        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        StudyGroup group = groupRepository.findById(id).orElse(null);
+        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can delete group"));
+
+        try {
+            jdbcTemplate.update("DELETE FROM study_sessions WHERE group_id = ?", id.toString());
+            jdbcTemplate.update("DELETE FROM study_group_members WHERE group_id = ?", id.toString());
+            jdbcTemplate.update("DELETE FROM study_groups WHERE id = ?", id.toString());
+        } catch (Exception ex) {
+            log.error("[Delete] DB error for group {}: {}", id, ex.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to delete group. Please try again."));
+        }
+        return ResponseEntity.ok(Map.of("deleted", true));
+    }
+
     @GetMapping("/{id}/sessions")
     public ResponseEntity<?> listSessions(@PathVariable UUID id, Authentication auth) {
         User actor = getCurrentUser(auth);
