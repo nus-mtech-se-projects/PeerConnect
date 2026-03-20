@@ -70,7 +70,7 @@ class GroupControllerTest {
             body.put("name", "Test group");
             body.put("moduleCode", "CS5000");
             body.put("description", "A test group");
-            body.put("preferredSchedule", "Weekends");
+            body.put("preferredSchedule", "2026-04-01T18:00:00");
             body.put("meetingLink", "https://zoom.us/test");
             when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(alice));
             when(groupRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
