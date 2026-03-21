@@ -1797,5 +1797,659 @@
         }
       ]
     }
+  ,
+    {
+      "name": "Tutoring",
+      "item": [
+        {
+          "name": "Create Tutoring Class",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"tutoringModuleCode\", \"CS\" + Date.now().toString().slice(-4));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on successful class creation\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns UUID id\", () => {",
+                  "  pm.expect(pm.response.json().id).to.match(",
+                  "    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i",
+                  "  );",
+                  "});",
+                  "pm.test(\"Returns correct moduleCode\", () => {",
+                  "  pm.expect(pm.response.json().moduleCode).to.eql(pm.environment.get(\"tutoringModuleCode\"));",
+                  "});",
+                  "pm.test(\"isTutor is true for creator\", () => {",
+                  "  pm.expect(pm.response.json().isTutor).to.be.true;",
+                  "});",
+                  "pm.test(\"enrolledCount is 0\", () => {",
+                  "  pm.expect(pm.response.json().enrolledCount).to.eql(0);",
+                  "});",
+                  "pm.environment.set(\"tutoringClassId\", pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Algorithms Help Session\",\n  \"moduleCode\": \"{{tutoringModuleCode}}\",\n  \"topic\": \"Graph Algorithms\",\n  \"description\": \"Covering BFS, DFS, Dijkstra\",\n  \"schedule\": \"Friday 6pm\",\n  \"mode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/test-tutoring\",\n  \"maxStudents\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Class - Missing Title (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when title is missing\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Class title is required\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Class - Invalid Mode (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when mode is invalid\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Mode must be one of: online, in-person, hybrid\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Class\",\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"weekend\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Class - In-Person Missing Location (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when in-person class has no location\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Location is required for in-person/hybrid classes\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Class\",\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"in-person\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Tutoring Classes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 response\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns an array\", () => {",
+                  "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "});",
+                  "pm.test(\"Created class is in the list\", () => {",
+                  "  const classId = pm.environment.get(\"tutoringClassId\");",
+                  "  const found = pm.response.json().find(c => c.id === classId);",
+                  "  pm.expect(found).to.exist;",
+                  "  pm.expect(found.isTutor).to.be.true;",
+                  "  pm.expect(found.moduleCode).to.be.a(\"string\");",
+                  "  pm.expect(found.enrolledCount).to.be.a(\"number\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Classes - No Token (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"403 without auth token\", () => {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register User 2 for Tutoring",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"tutoringEmail2\", \"tutor2-\" + Date.now() + \"@u.nus.edu.sg\");",
+                  "pm.environment.set(\"tutoringNusId2\", \"T\" + Date.now().toString().slice(-7) + \"Y\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on registration\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nusStudentId\": \"{{tutoringNusId2}}\",\n  \"firstName\": \"Student\",\n  \"lastName\": \"Two\",\n  \"email\": \"{{tutoringEmail2}}\",\n  \"phone\": \"91000002\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login User 2 for Tutoring",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on login\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.environment.set(\"tutoringToken2\", pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{tutoringEmail2}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enroll in Tutoring Class",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on enrollment\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"enrolled is true\", () => {",
+                  "  pm.expect(pm.response.json().enrolled).to.be.true;",
+                  "});",
+                  "pm.test(\"enrolledCount incremented\", () => {",
+                  "  pm.expect(pm.response.json().enrolledCount).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "enroll"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enroll Again - Already Enrolled",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on duplicate enrollment\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"alreadyEnrolled is true\", () => {",
+                  "  pm.expect(pm.response.json().alreadyEnrolled).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "enroll"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tutor Cannot Enroll Own Class (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when tutor enrolls own class\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Tutor cannot enroll in their own class\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "enroll"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Classes - Student Sees Enrolled=True",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 response\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Student sees enrolled=true for their class\", () => {",
+                  "  const classId = pm.environment.get(\"tutoringClassId\");",
+                  "  const found = pm.response.json().find(c => c.id === classId);",
+                  "  pm.expect(found).to.exist;",
+                  "  pm.expect(found.enrolled).to.be.true;",
+                  "  pm.expect(found.isTutor).to.be.false;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Leave Tutoring Class",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on leave\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"enrolled is false\", () => {",
+                  "  pm.expect(pm.response.json().enrolled).to.be.false;",
+                  "});",
+                  "pm.test(\"enrolledCount decremented\", () => {",
+                  "  pm.expect(pm.response.json().enrolledCount).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "leave"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Leave Again - Already Left",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on double leave\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"alreadyLeft is true\", () => {",
+                  "  pm.expect(pm.response.json().alreadyLeft).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "leave"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tutor Cannot Leave Own Class (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when tutor tries to leave own class\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Tutor cannot leave their own class\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "leave"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Non-Owner Cannot Delete Class (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"403 when non-owner deletes class\", () => {",
+                  "  pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Not authorized to delete this tutoring class\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Class Not Found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"404 when class not found\", () => {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "00000000-0000-0000-0000-000000000000"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cleanup: Delete Tutoring Class",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on cleanup\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"deleted is true\", () => {",
+                  "  pm.expect(pm.response.json().deleted).to.be.true;",
+                  "});",
+                  "pm.environment.set(\"tutoringClassId\", \"\");",
+                  "pm.environment.set(\"tutoringToken2\", \"\");",
+                  "pm.environment.set(\"tutoringEmail2\", \"\");",
+                  "pm.environment.set(\"tutoringNusId2\", \"\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
   ]
 }
