@@ -191,7 +191,7 @@ class GroupControllerTest {
         void successfulFeedbackSubmissionReturnsSuccess() {
             when(peerFeedbackRepository.save(any(PeerFeedback.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-            ResponseEntity<?> response = controller.submitFeedback(groupId, sessionId, authFor(alice), validFeedbackBody(groupId, sessionId, bob.getId()));
+            ResponseEntity<Map<String, Object>> response = controller.submitFeedback(groupId, sessionId, authFor(alice), validFeedbackBody(groupId, sessionId, bob.getId()));
 
             assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(response.getBody()).isInstanceOf(Map.class);
@@ -211,7 +211,7 @@ class GroupControllerTest {
             UUID otherGroupId = UUID.randomUUID();
             session.setGroupId(otherGroupId);
 
-            ResponseEntity<?> response = controller.submitFeedback(groupId, sessionId, authFor(alice), validFeedbackBody(groupId, sessionId, bob.getId()));
+            ResponseEntity<Map<String, Object>> response = controller.submitFeedback(groupId, sessionId, authFor(alice), validFeedbackBody(groupId, sessionId, bob.getId()));
 
             assertThat(response.getStatusCode().value()).isEqualTo(400);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "Session does not belong to the specified group"));
@@ -222,7 +222,7 @@ class GroupControllerTest {
         void selfReviewIsRejected() {
             Map<String, Object> body = validFeedbackBody(groupId, sessionId, alice.getId());
 
-            ResponseEntity<?> response = controller.submitFeedback(groupId, sessionId, authFor(alice), body);
+            ResponseEntity<Map<String, Object>> response = controller.submitFeedback(groupId, sessionId, authFor(alice), body);
 
             assertThat(response.getStatusCode().value()).isEqualTo(400);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "You cannot submit feedback for yourself"));
@@ -234,7 +234,7 @@ class GroupControllerTest {
             when(memberRepository.findByGroupIdAndUserId(groupId, bob.getId()))
                 .thenReturn(Optional.of(pendingMembership(groupId, bob.getId())));
 
-            ResponseEntity<?> response = controller.submitFeedback(groupId, sessionId, authFor(alice), validFeedbackBody(groupId, sessionId, bob.getId()));
+            ResponseEntity<Map<String, Object>> response = controller.submitFeedback(groupId, sessionId, authFor(alice), validFeedbackBody(groupId, sessionId, bob.getId()));
 
             assertThat(response.getStatusCode().value()).isEqualTo(400);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "Reviewee must be an approved member of the group"));
@@ -246,7 +246,7 @@ class GroupControllerTest {
             when(peerFeedbackRepository.existsBySessionIdAndReviewerIdAndRevieweeId(sessionId, alice.getId(), bob.getId()))
                 .thenReturn(true);
 
-            ResponseEntity<?> response = controller.submitFeedback(groupId, sessionId, authFor(alice), validFeedbackBody(groupId, sessionId, bob.getId()));
+            ResponseEntity<Map<String, Object>> response = controller.submitFeedback(groupId, sessionId, authFor(alice), validFeedbackBody(groupId, sessionId, bob.getId()));
 
             assertThat(response.getStatusCode().value()).isEqualTo(409);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "Feedback has already been submitted for this peer and session"));
@@ -258,7 +258,7 @@ class GroupControllerTest {
             Map<String, Object> body = validFeedbackBody(groupId, sessionId, bob.getId());
             body.put("preparedness", 6);
 
-            ResponseEntity<?> response = controller.submitFeedback(groupId, sessionId, authFor(alice), body);
+            ResponseEntity<Map<String, Object>> response = controller.submitFeedback(groupId, sessionId, authFor(alice), body);
 
             assertThat(response.getStatusCode().value()).isEqualTo(400);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "preparedness must be between 1 and 5"));
@@ -267,7 +267,7 @@ class GroupControllerTest {
 
         @Test
         void unauthenticatedRequestIsRejected() {
-            ResponseEntity<?> response = controller.submitFeedback(groupId, sessionId, null, validFeedbackBody(groupId, sessionId, bob.getId()));
+            ResponseEntity<Map<String, Object>> response = controller.submitFeedback(groupId, sessionId, null, validFeedbackBody(groupId, sessionId, bob.getId()));
 
             assertThat(response.getStatusCode().value()).isEqualTo(401);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "Authentication required"));
