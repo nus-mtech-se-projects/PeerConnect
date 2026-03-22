@@ -72,9 +72,14 @@ public class GroupController {
         String studyMode = firstNonBlank(asString(body.get("studyMode")), "online").toLowerCase();
         String location = asString(body.get("location"));
         String meetingLink = asString(body.get("meetingLink"));
-        String preferredSchedule = asString(body.get("preferredSchedule"));
+        String preferredScheduleStr = asString(body.get("preferredSchedule"));
+        LocalDateTime preferredSchedule = parseDateTime(preferredScheduleStr);
         Short maxMembers = asShort(body.get("maxMembers"), (short) 10);
         boolean approvalRequired = asBoolean(body.get("approvalRequired"), false);
+
+        if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
+        }
 
         String validationError = validateGroupInput(name, moduleCode, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
         if (validationError != null) {
@@ -151,7 +156,13 @@ public class GroupController {
         String studyMode = firstNonBlank(asString(body.get("studyMode")), group.getStudyMode(), "online").toLowerCase();
         String location = body.containsKey("location") ? asString(body.get("location")) : group.getLocation();
         String meetingLink = body.containsKey("meetingLink") ? asString(body.get("meetingLink")) : group.getMeetingLink();
-        String preferredSchedule = firstNonBlank(asString(body.get("preferredSchedule")), group.getPreferredSchedule());
+        String preferredScheduleStr = asString(body.get("preferredSchedule"));
+        LocalDateTime preferredSchedule = preferredScheduleStr != null && !preferredScheduleStr.isBlank()
+            ? parseDateTime(preferredScheduleStr)
+            : group.getPreferredSchedule();
+        if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
+        }
         Short maxMembers = body.containsKey("maxMembers") ? asShort(body.get("maxMembers"), group.getMaxMembers()) : group.getMaxMembers();
         boolean approvalRequired = body.containsKey("approvalRequired")
             ? asBoolean(body.get("approvalRequired"), false)
@@ -679,12 +690,12 @@ public class GroupController {
                                       String studyMode,
                                       String location,
                                       String meetingLink,
-                                      String preferredSchedule,
+                                      LocalDateTime preferredSchedule,
                                       Short maxMembers) {
         if (name == null || name.isBlank()) return "Group name is required";
         if (moduleCode == null || moduleCode.isBlank()) return "Module/subject is required";
         if (description == null || description.isBlank()) return "Description is required";
-        if (preferredSchedule == null || preferredSchedule.isBlank()) return "Preferred schedule is required";
+        if (preferredSchedule == null) return "Preferred schedule is required";
         if (!"online".equalsIgnoreCase(studyMode) && !"in-person".equalsIgnoreCase(studyMode) && !"hybrid".equalsIgnoreCase(studyMode)) {
             return "Study mode must be one of: online, in-person, hybrid";
         }
@@ -811,7 +822,11 @@ public class GroupController {
         try {
             return LocalDateTime.parse(value);
         } catch (DateTimeParseException ex) {
-            return null;
+            try {
+                return LocalDateTime.parse(value.trim().replace(" ", "T"));
+            } catch (DateTimeParseException ex2) {
+                return null;
+            }
         }
     }
 
