@@ -215,11 +215,6 @@ public class GroupController {
 
         // Send group-updated email notification to approved members with role "member"
         try {
-            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
-            String ownerName = owner != null
-                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
-                : "Group Owner";
-            String ownerEmail = owner != null ? owner.getEmail() : "";
             String schedule = formatSchedule(group.getPreferredSchedule());
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             if (memberEmails.length > 0) {
@@ -229,8 +224,8 @@ public class GroupController {
                     group.getModuleCode() != null ? group.getModuleCode() : "",
                     group.getTopic() != null ? group.getTopic() : "",
                     schedule,
-                    ownerName,
-                    ownerEmail
+                    resolveOwnerName(group),
+                    resolveOwnerEmail(group)
                 );
             }
         } catch (Exception emailEx) {
@@ -410,11 +405,6 @@ public class GroupController {
 
         // Send invitation email notification
         try {
-            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
-            String ownerName = owner != null
-                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
-                : "Group Owner";
-            String ownerEmail = owner != null ? owner.getEmail() : "";
             String inviteeName = (target.getFirstName() + " " + target.getLastName()).trim();
             String schedule = formatSchedule(group.getPreferredSchedule());
 
@@ -425,8 +415,8 @@ public class GroupController {
                 group.getModuleCode() != null ? group.getModuleCode() : "",
                 group.getTopic() != null ? group.getTopic() : "",
                 schedule,
-                ownerName,
-                ownerEmail
+                resolveOwnerName(group),
+                resolveOwnerEmail(group)
             );
         } catch (Exception emailEx) {
             log.warn("[Invite] Failed to send invitation email to {}: {}", email, emailEx.getMessage());
@@ -465,11 +455,6 @@ public class GroupController {
         // Send approval notification email
         try {
             User member = userRepository.findById(userId).orElse(null);
-            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
-            String ownerName = owner != null
-                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
-                : "Group Owner";
-            String ownerEmail = owner != null ? owner.getEmail() : "";
             String memberName = member != null
                 ? ((member.getFirstName() + " " + member.getLastName()).trim())
                 : "Member";
@@ -483,8 +468,8 @@ public class GroupController {
                     group.getModuleCode() != null ? group.getModuleCode() : "",
                     group.getTopic() != null ? group.getTopic() : "",
                     schedule,
-                    ownerName,
-                    ownerEmail
+                    resolveOwnerName(group),
+                    resolveOwnerEmail(group)
                 );
             }
         } catch (Exception emailEx) {
@@ -525,11 +510,6 @@ public class GroupController {
 
         // Send rejection notification email
         try {
-            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
-            String ownerName = owner != null
-                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
-                : "Group Owner";
-            String ownerEmail = owner != null ? owner.getEmail() : "";
             String memberName = member != null
                 ? ((member.getFirstName() + " " + member.getLastName()).trim())
                 : "Member";
@@ -543,8 +523,8 @@ public class GroupController {
                     group.getModuleCode() != null ? group.getModuleCode() : "",
                     group.getTopic() != null ? group.getTopic() : "",
                     schedule,
-                    ownerName,
-                    ownerEmail
+                    resolveOwnerName(group),
+                    resolveOwnerEmail(group)
                 );
             }
         } catch (Exception emailEx) {
@@ -601,11 +581,6 @@ public class GroupController {
 
         // Send dissolution email to all members
         try {
-            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
-            String ownerName = owner != null
-                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
-                : "Group Owner";
-            String ownerEmail = owner != null ? owner.getEmail() : "";
             String schedule = formatSchedule(group.getPreferredSchedule());
 
             List<StudyGroupMember> allMembers = groupMemberRepository.findByGroupId(id);
@@ -622,8 +597,8 @@ public class GroupController {
                     group.getModuleCode() != null ? group.getModuleCode() : "",
                     group.getTopic() != null ? group.getTopic() : "",
                     schedule,
-                    ownerName,
-                    ownerEmail
+                    resolveOwnerName(group),
+                    resolveOwnerEmail(group)
                 );
             }
         } catch (Exception emailEx) {
@@ -709,11 +684,6 @@ public class GroupController {
 
         // Send session-created email notification to approved members with role "member"
         try {
-            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
-            String ownerName = owner != null
-                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
-                : "Group Owner";
-            String ownerEmail = owner != null ? owner.getEmail() : "";
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             if (memberEmails.length > 0) {
                 emailService.sendSessionCreated(
@@ -724,25 +694,15 @@ public class GroupController {
                     session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
                     session.getLocation(),
                     session.getMeetingLink(),
-                    ownerName,
-                    ownerEmail
+                    resolveOwnerName(group),
+                    resolveOwnerEmail(group)
                 );
             }
         } catch (Exception emailEx) {
             log.warn("[CreateSession] Failed to send session-created emails for group {}: {}", id, emailEx.getMessage());
         }
 
-        Map<String, Object> resp = new LinkedHashMap<>();
-        resp.put("id", session.getId().toString());
-        resp.put("groupId", session.getGroupId().toString());
-        resp.put("title", session.getTitle());
-        resp.put("notes", session.getNotes() != null ? session.getNotes() : "");
-        resp.put("startsAt", session.getStartsAt().toString());
-        resp.put("endsAt", session.getEndsAt() != null ? session.getEndsAt().toString() : null);
-        resp.put("location", session.getLocation() != null ? session.getLocation() : "");
-        resp.put("meetingLink", session.getMeetingLink() != null ? session.getMeetingLink() : "");
-        resp.put("createdBy", session.getCreatedBy().toString());
-        return ResponseEntity.ok(resp);
+        return ResponseEntity.ok(buildSessionResponse(session));
     }
 
     @PutMapping("/{id}/sessions/{sessionId}")
@@ -779,11 +739,6 @@ public class GroupController {
 
         // Send session-updated email notification to approved members with role "member"
         try {
-            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
-            String ownerName = owner != null
-                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
-                : "Group Owner";
-            String ownerEmail = owner != null ? owner.getEmail() : "";
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             if (memberEmails.length > 0) {
                 emailService.sendSessionUpdated(
@@ -794,25 +749,15 @@ public class GroupController {
                     session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
                     session.getLocation(),
                     session.getMeetingLink(),
-                    ownerName,
-                    ownerEmail
+                    resolveOwnerName(group),
+                    resolveOwnerEmail(group)
                 );
             }
         } catch (Exception emailEx) {
             log.warn("[UpdateSession] Failed to send session-updated emails for session {} in group {}: {}", sessionId, id, emailEx.getMessage());
         }
 
-        Map<String, Object> resp = new LinkedHashMap<>();
-        resp.put("id", session.getId().toString());
-        resp.put("groupId", session.getGroupId().toString());
-        resp.put("title", session.getTitle());
-        resp.put("notes", session.getNotes() != null ? session.getNotes() : "");
-        resp.put("startsAt", session.getStartsAt().toString());
-        resp.put("endsAt", session.getEndsAt() != null ? session.getEndsAt().toString() : null);
-        resp.put("location", session.getLocation() != null ? session.getLocation() : "");
-        resp.put("meetingLink", session.getMeetingLink() != null ? session.getMeetingLink() : "");
-        resp.put("createdBy", session.getCreatedBy().toString());
-        return ResponseEntity.ok(resp);
+        return ResponseEntity.ok(buildSessionResponse(session));
     }
 
     @DeleteMapping("/{id}/sessions/{sessionId}")
@@ -835,11 +780,6 @@ public class GroupController {
 
         // Send session-deleted email notification to approved members with role "member"
         try {
-            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
-            String ownerName = owner != null
-                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
-                : "Group Owner";
-            String ownerEmail = owner != null ? owner.getEmail() : "";
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             if (memberEmails.length > 0) {
                 emailService.sendSessionDeleted(
@@ -847,8 +787,8 @@ public class GroupController {
                     group.getName() != null ? group.getName() : "",
                     deletedTitle,
                     deletedStartsAt,
-                    ownerName,
-                    ownerEmail
+                    resolveOwnerName(group),
+                    resolveOwnerEmail(group)
                 );
             }
         } catch (Exception emailEx) {
@@ -926,6 +866,30 @@ public class GroupController {
     private boolean isMember(UUID groupId, UUID userId) {
         StudyGroupMember membership = groupMemberRepository.findByGroupIdAndUserId(groupId, userId).orElse(null);
         return membership != null && "approved".equalsIgnoreCase(membership.getMembershipStatus());
+    }
+
+    private String resolveOwnerName(StudyGroup group) {
+        User owner = group.getCreatedBy() == null ? null : userRepository.findById(group.getCreatedBy()).orElse(null);
+        return owner != null ? (owner.getFirstName() + " " + owner.getLastName()).trim() : "Group Owner";
+    }
+
+    private String resolveOwnerEmail(StudyGroup group) {
+        User owner = group.getCreatedBy() == null ? null : userRepository.findById(group.getCreatedBy()).orElse(null);
+        return owner != null ? owner.getEmail() : "";
+    }
+
+    private Map<String, Object> buildSessionResponse(StudySession session) {
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("id", session.getId().toString());
+        resp.put("groupId", session.getGroupId().toString());
+        resp.put("title", session.getTitle());
+        resp.put("notes", session.getNotes() != null ? session.getNotes() : "");
+        resp.put("startsAt", session.getStartsAt().toString());
+        resp.put("endsAt", session.getEndsAt() != null ? session.getEndsAt().toString() : null);
+        resp.put("location", session.getLocation() != null ? session.getLocation() : "");
+        resp.put("meetingLink", session.getMeetingLink() != null ? session.getMeetingLink() : "");
+        resp.put("createdBy", session.getCreatedBy().toString());
+        return resp;
     }
 
     /**
