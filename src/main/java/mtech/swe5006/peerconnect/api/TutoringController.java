@@ -1,5 +1,7 @@
 package mtech.swe5006.peerconnect.api;
 
+import mtech.swe5006.peerconnect.data.sql.PeerFeedback;
+import mtech.swe5006.peerconnect.data.sql.PeerFeedbackRepository;
 import mtech.swe5006.peerconnect.data.sql.TutoringClass;
 import mtech.swe5006.peerconnect.data.sql.TutoringClassRepository;
 import mtech.swe5006.peerconnect.data.sql.TutoringEnrollment;
@@ -22,13 +24,16 @@ public class TutoringController {
     private final TutoringClassRepository tutoringClassRepository;
     private final TutoringEnrollmentRepository tutoringEnrollmentRepository;
     private final UserRepository userRepository;
+    private final PeerFeedbackRepository peerFeedbackRepository;
 
     public TutoringController(TutoringClassRepository tutoringClassRepository,
                               TutoringEnrollmentRepository tutoringEnrollmentRepository,
-                              UserRepository userRepository) {
+                              UserRepository userRepository,
+                              PeerFeedbackRepository peerFeedbackRepository) {
         this.tutoringClassRepository = tutoringClassRepository;
         this.tutoringEnrollmentRepository = tutoringEnrollmentRepository;
         this.userRepository = userRepository;
+        this.peerFeedbackRepository = peerFeedbackRepository;
     }
 
     @GetMapping("/classes")
@@ -169,6 +174,127 @@ public class TutoringController {
         ));
     }
 
+    @PostMapping("/classes/{id}/feedback")
+    public ResponseEntity<?> submitFeedback(@PathVariable UUID id, Authentication auth, @RequestBody Map<String, Object> body) {
+        User reviewer = getCurrentUser(auth);
+        if (reviewer == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Authentication required"));
+        }
+
+        TutoringClass tutoringClass = tutoringClassRepository.findById(id).orElse(null);
+        if (tutoringClass == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Tutoring class not found"));
+        }
+
+        TutoringEnrollment enrollment = tutoringEnrollmentRepository
+            .findByClassIdAndUserId(id, reviewer.getId())
+            .orElse(null);
+
+        if (enrollment == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Only enrolled students can submit feedback"));
+        }
+
+        UUID revieweeId;
+        try {
+            Object reqReviewee = body.get("revieweeId");
+            if (reqReviewee == null || String.valueOf(reqReviewee).isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "revieweeId is required"));
+            }
+            revieweeId = UUID.fromString(String.valueOf(reqReviewee));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid revieweeId format"));
+        }
+
+        if (reviewer.getId().equals(revieweeId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "You cannot submit feedback for yourself"));
+        }
+
+        User reviewee = userRepository.findById(revieweeId).orElse(null);
+        if (reviewee == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Reviewee not found"));
+        }
+
+        if (peerFeedbackRepository.existsBySessionIdAndReviewerIdAndRevieweeId(id, reviewer.getId(), revieweeId)) {
+            return ResponseEntity.status(409).body(Map.of("error", "Feedback has already been submitted for this peer and session"));
+        }
+
+        Short overallRating = asShort(body.get("overallRating"), null);
+        Short preparedness = asShort(body.get("preparedness"), null);
+        Short communication = asShort(body.get("communication"), null);
+        Short helpfulness = asShort(body.get("helpfulness"), null);
+        Short reliability = asShort(body.get("reliability"), null);
+
+        Short[] ratings = {overallRating, preparedness, communication, helpfulness, reliability};
+        for (Short rating : ratings) {
+            if (rating == null || rating < 1 || rating > 5) {
+                return ResponseEntity.badRequest().body(Map.of("error", "All ratings (overall, preparedness, communication, helpfulness, reliability) are required and must be between 1 and 5"));
+            }
+        }
+
+        PeerFeedback feedback = new PeerFeedback();
+        feedback.setGroupId(id);
+        feedback.setSessionId(id);
+        feedback.setReviewerId(reviewer.getId());
+        feedback.setRevieweeId(revieweeId);
+        feedback.setOverallRating(overallRating);
+        feedback.setPreparedness(preparedness);
+        feedback.setCommunication(communication);
+        feedback.setHelpfulness(helpfulness);
+        feedback.setReliability(reliability);
+        feedback.setStrengths(asString(body.get("strengths")));
+        feedback.setImprovements(asString(body.get("improvements")));
+        feedback.setAnonymousToPeer(Boolean.parseBoolean(String.valueOf(body.get("anonymousToPeer"))));
+
+        peerFeedbackRepository.save(feedback);
+        return ResponseEntity.ok(buildFeedbackResponse(id, id, revieweeId, reviewee, feedback));
+    }
+
+    @GetMapping("/classes/{id}/feedback")
+    public ResponseEntity<?> getClassFeedback(@PathVariable UUID id, Authentication auth) {
+        User currentUser = getCurrentUser(auth);
+        if (currentUser == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Authentication required"));
+        }
+
+        TutoringClass tutoringClass = tutoringClassRepository.findById(id).orElse(null);
+        if (tutoringClass == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Tutoring class not found"));
+        }
+
+        if (!currentUser.getId().equals(tutoringClass.getCreatedBy())) {
+            return ResponseEntity.status(403).body(Map.of("error", "Only the tutor can view submitted feedback"));
+        }
+
+        List<Map<String, Object>> payload = peerFeedbackRepository.findByGroupIdOrderByCreatedAtDesc(id)
+            .stream()
+            .map(feedback -> {
+                User reviewer = userRepository.findById(feedback.getReviewerId()).orElse(null);
+                User reviewee = userRepository.findById(feedback.getRevieweeId()).orElse(null);
+
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", feedback.getId() != null ? feedback.getId().toString() : null);
+                row.put("groupId", feedback.getGroupId() != null ? feedback.getGroupId().toString() : null);
+                row.put("sessionId", feedback.getSessionId() != null ? feedback.getSessionId().toString() : null);
+                row.put("revieweeId", feedback.getRevieweeId() != null ? feedback.getRevieweeId().toString() : null);
+                row.put("revieweeName", displayName(reviewee));
+                row.put("reviewerName", displayName(reviewer));
+                row.put("reviewerEmail", reviewer != null ? reviewer.getEmail() : null);
+                row.put("overallRating", feedback.getOverallRating());
+                row.put("preparedness", feedback.getPreparedness());
+                row.put("communication", feedback.getCommunication());
+                row.put("helpfulness", feedback.getHelpfulness());
+                row.put("reliability", feedback.getReliability());
+                row.put("strengths", feedback.getStrengths());
+                row.put("improvements", feedback.getImprovements());
+                row.put("anonymousToPeer", Boolean.TRUE.equals(feedback.getAnonymousToPeer()));
+                row.put("submittedAt", feedback.getCreatedAt());
+                return row;
+            })
+            .toList();
+
+        return ResponseEntity.ok(payload);
+    }
+
     private User getCurrentUser(Authentication auth) {
         if (auth == null) return null;
         return userRepository.findByEmail(auth.getName()).orElse(null);
@@ -198,7 +324,27 @@ public class TutoringController {
         row.put("enrolled", enrolled);
         row.put("tutorName", tutor == null ? null :
             ((firstNonBlank(tutor.getFirstName(), "") + " " + firstNonBlank(tutor.getLastName(), "")).trim()));
+        row.put("tutorId", tutor == null ? null : tutor.getId().toString());
+        row.put("tutorEmail", tutor == null ? null : tutor.getEmail());
         return row;
+    }
+
+    private Map<String, Object> buildFeedbackResponse(UUID groupId, UUID sessionId, UUID revieweeId, User reviewee, PeerFeedback feedback) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", feedback.getId() != null ? feedback.getId().toString() : null);
+        response.put("groupId", groupId.toString());
+        response.put("sessionId", sessionId.toString());
+        response.put("revieweeId", revieweeId.toString());
+        String revieweeName = (firstNonBlank(reviewee.getFirstName(), "") + " " + firstNonBlank(reviewee.getLastName(), "")).trim();
+        response.put("revieweeName", revieweeName.isEmpty() ? reviewee.getEmail() : revieweeName);
+        response.put("anonymousToPeer", Boolean.TRUE.equals(feedback.getAnonymousToPeer()));
+        return response;
+    }
+
+    private String displayName(User user) {
+        if (user == null) return null;
+        String fullName = (firstNonBlank(user.getFirstName(), "") + " " + firstNonBlank(user.getLastName(), "")).trim();
+        return fullName.isEmpty() ? user.getEmail() : fullName;
     }
 
     private String validateClassInput(String title,
