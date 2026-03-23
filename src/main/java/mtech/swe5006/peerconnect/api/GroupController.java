@@ -8,6 +8,8 @@ import mtech.swe5006.peerconnect.data.sql.StudySession;
 import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
+import mtech.swe5006.peerconnect.service.EmailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +18,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -37,23 +41,43 @@ public class GroupController {
     private final StudySessionRepository studySessionRepository;
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final EmailService emailService;
+    private final RestrictedUserRepository restrictedUserRepository;
 
     public GroupController(StudyGroupRepository groupRepository,
                            StudyGroupMemberRepository groupMemberRepository,
                            StudySessionRepository studySessionRepository,
                            UserRepository userRepository,
-                           JdbcTemplate jdbcTemplate) {
+                           JdbcTemplate jdbcTemplate,
+                           EmailService emailService,
+                           RestrictedUserRepository restrictedUserRepository) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.studySessionRepository = studySessionRepository;
         this.userRepository = userRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.emailService = emailService;
+        this.restrictedUserRepository = restrictedUserRepository;
     }
 
     @GetMapping
     public ResponseEntity<?> getAllGroups(Authentication auth) {
         User currentUser = getCurrentUser(auth);
         List<StudyGroup> groups = groupRepository.findByStatusInOrderByCreatedAtDesc(List.of("active", "full"));
+
+        // Filter out groups whose owner has restricted the current user
+        if (currentUser != null) {
+            UUID uid = currentUser.getId();
+            int before = groups.size();
+            groups = groups.stream()
+                .filter(g -> g.getCreatedBy() == null
+                    || !restrictedUserRepository.existsByBlockerIdAndBlockedId(g.getCreatedBy(), uid))
+                .toList();
+            if (groups.size() < before) {
+                log.info("[AllGroups] Filtered {} restricted groups for user {}", before - groups.size(), uid);
+            }
+        }
+
         List<Map<String, Object>> payload = groups.stream().map(group -> buildGroupSummary(group, currentUser)).toList();
         return ResponseEntity.ok(payload);
     }
@@ -189,6 +213,30 @@ public class GroupController {
         refreshGroupStatus(group);
         groupRepository.save(group);
 
+        // Send group-updated email notification to approved members with role "member"
+        try {
+            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
+            String ownerName = owner != null
+                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
+                : "Group Owner";
+            String ownerEmail = owner != null ? owner.getEmail() : "";
+            String schedule = formatSchedule(group.getPreferredSchedule());
+            String[] memberEmails = getApprovedMemberEmails(group.getId());
+            if (memberEmails.length > 0) {
+                emailService.sendGroupUpdated(
+                    memberEmails,
+                    group.getName() != null ? group.getName() : "",
+                    group.getModuleCode() != null ? group.getModuleCode() : "",
+                    group.getTopic() != null ? group.getTopic() : "",
+                    schedule,
+                    ownerName,
+                    ownerEmail
+                );
+            }
+        } catch (Exception emailEx) {
+            log.warn("[UpdateGroup] Failed to send update emails for group {}: {}", id, emailEx.getMessage());
+        }
+
         return ResponseEntity.ok(buildGroupDetails(group, user));
     }
 
@@ -206,6 +254,12 @@ public class GroupController {
 
         if ("dissolved".equalsIgnoreCase(group.getStatus())) {
             return ResponseEntity.status(400).body(Map.of("error", "Group is dissolved"));
+        }
+
+        // Check if the group owner has restricted this user
+        if (group.getCreatedBy() != null
+                && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), user.getId())) {
+            return ResponseEntity.status(403).body(Map.of("error", "You have been restricted from joining this group by the owner"));
         }
 
         Optional<StudyGroupMember> existing = groupMemberRepository.findByGroupIdAndUserId(id, user.getId());
@@ -329,6 +383,12 @@ public class GroupController {
         User target = userRepository.findByEmail(email).orElse(null);
         if (target == null) return ResponseEntity.status(404).body(Map.of("error", "Target user not found"));
 
+        // Check if the group owner has restricted this user
+        if (group.getCreatedBy() != null
+                && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), target.getId())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "This user has been restricted and cannot be invited"));
+        }
+
         Optional<StudyGroupMember> existing = groupMemberRepository.findByGroupIdAndUserId(id, target.getId());
         if (existing.isPresent()) {
             return ResponseEntity.ok(Map.of("invited", false, "message", "User is already associated with this group"));
@@ -347,6 +407,30 @@ public class GroupController {
         membership.setRole("member");
         membership.setMembershipStatus("invited");
         groupMemberRepository.save(membership);
+
+        // Send invitation email notification
+        try {
+            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
+            String ownerName = owner != null
+                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
+                : "Group Owner";
+            String ownerEmail = owner != null ? owner.getEmail() : "";
+            String inviteeName = (target.getFirstName() + " " + target.getLastName()).trim();
+            String schedule = formatSchedule(group.getPreferredSchedule());
+
+            emailService.sendGroupInvitation(
+                target.getEmail(),
+                inviteeName,
+                group.getName() != null ? group.getName() : "",
+                group.getModuleCode() != null ? group.getModuleCode() : "",
+                group.getTopic() != null ? group.getTopic() : "",
+                schedule,
+                ownerName,
+                ownerEmail
+            );
+        } catch (Exception emailEx) {
+            log.warn("[Invite] Failed to send invitation email to {}: {}", email, emailEx.getMessage());
+        }
 
         return ResponseEntity.ok(Map.of("invited", true, "email", email));
     }
@@ -377,6 +461,36 @@ public class GroupController {
         groupMemberRepository.save(membership);
         refreshGroupStatus(group);
         groupRepository.save(group);
+
+        // Send approval notification email
+        try {
+            User member = userRepository.findById(userId).orElse(null);
+            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
+            String ownerName = owner != null
+                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
+                : "Group Owner";
+            String ownerEmail = owner != null ? owner.getEmail() : "";
+            String memberName = member != null
+                ? ((member.getFirstName() + " " + member.getLastName()).trim())
+                : "Member";
+            String schedule = formatSchedule(group.getPreferredSchedule());
+
+            if (member != null && member.getEmail() != null) {
+                emailService.sendMemberApproved(
+                    member.getEmail(),
+                    memberName,
+                    group.getName() != null ? group.getName() : "",
+                    group.getModuleCode() != null ? group.getModuleCode() : "",
+                    group.getTopic() != null ? group.getTopic() : "",
+                    schedule,
+                    ownerName,
+                    ownerEmail
+                );
+            }
+        } catch (Exception emailEx) {
+            log.warn("[Approve] Failed to send approval email for user {} in group {}: {}", userId, id, emailEx.getMessage());
+        }
+
         return ResponseEntity.ok(Map.of("approved", true));
     }
 
@@ -397,6 +511,9 @@ public class GroupController {
             return ResponseEntity.ok(Map.of("removed", false, "message", "User is not a member"));
         }
 
+        // Resolve member details before deletion for email notification
+        User member = userRepository.findById(userId).orElse(null);
+
         groupMemberRepository.deleteByGroupIdAndUserId(id, userId);
         refreshGroupStatus(group);
         try {
@@ -405,6 +522,35 @@ public class GroupController {
             log.error("[RemoveMember] DB error for group {}: {}", id, ex.getMessage());
             return ResponseEntity.status(500).body(Map.of("error", "Failed to remove member. Please try again."));
         }
+
+        // Send rejection notification email
+        try {
+            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
+            String ownerName = owner != null
+                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
+                : "Group Owner";
+            String ownerEmail = owner != null ? owner.getEmail() : "";
+            String memberName = member != null
+                ? ((member.getFirstName() + " " + member.getLastName()).trim())
+                : "Member";
+            String schedule = formatSchedule(group.getPreferredSchedule());
+
+            if (member != null && member.getEmail() != null) {
+                emailService.sendMemberRejected(
+                    member.getEmail(),
+                    memberName,
+                    group.getName() != null ? group.getName() : "",
+                    group.getModuleCode() != null ? group.getModuleCode() : "",
+                    group.getTopic() != null ? group.getTopic() : "",
+                    schedule,
+                    ownerName,
+                    ownerEmail
+                );
+            }
+        } catch (Exception emailEx) {
+            log.warn("[RemoveMember] Failed to send rejection email for user {} in group {}: {}", userId, id, emailEx.getMessage());
+        }
+
         return ResponseEntity.ok(Map.of("removed", true));
     }
 
@@ -452,6 +598,38 @@ public class GroupController {
             log.error("[Dissolve] DB error for group {}: {}", id, ex.getMessage());
             return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group. Please try again."));
         }
+
+        // Send dissolution email to all members
+        try {
+            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
+            String ownerName = owner != null
+                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
+                : "Group Owner";
+            String ownerEmail = owner != null ? owner.getEmail() : "";
+            String schedule = formatSchedule(group.getPreferredSchedule());
+
+            List<StudyGroupMember> allMembers = groupMemberRepository.findByGroupId(id);
+            List<String> memberEmails = allMembers.stream()
+                .filter(m -> !"owner".equalsIgnoreCase(m.getRole()))
+                .map(m -> userRepository.findById(m.getUserId()).map(User::getEmail).orElse(null))
+                .filter(e -> e != null && !e.isBlank())
+                .toList();
+
+            if (!memberEmails.isEmpty()) {
+                emailService.sendGroupDissolved(
+                    memberEmails.toArray(new String[0]),
+                    group.getName() != null ? group.getName() : "",
+                    group.getModuleCode() != null ? group.getModuleCode() : "",
+                    group.getTopic() != null ? group.getTopic() : "",
+                    schedule,
+                    ownerName,
+                    ownerEmail
+                );
+            }
+        } catch (Exception emailEx) {
+            log.warn("[Dissolve] Failed to send dissolution emails for group {}: {}", id, emailEx.getMessage());
+        }
+
         return ResponseEntity.ok(Map.of("dissolved", true));
     }
 
@@ -529,6 +707,31 @@ public class GroupController {
             return ResponseEntity.status(500).body(Map.of("error", "Failed to save session. Please try again."));
         }
 
+        // Send session-created email notification to approved members with role "member"
+        try {
+            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
+            String ownerName = owner != null
+                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
+                : "Group Owner";
+            String ownerEmail = owner != null ? owner.getEmail() : "";
+            String[] memberEmails = getApprovedMemberEmails(group.getId());
+            if (memberEmails.length > 0) {
+                emailService.sendSessionCreated(
+                    memberEmails,
+                    group.getName() != null ? group.getName() : "",
+                    session.getTitle(),
+                    formatSchedule(session.getStartsAt()),
+                    session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
+                    session.getLocation(),
+                    session.getMeetingLink(),
+                    ownerName,
+                    ownerEmail
+                );
+            }
+        } catch (Exception emailEx) {
+            log.warn("[CreateSession] Failed to send session-created emails for group {}: {}", id, emailEx.getMessage());
+        }
+
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("id", session.getId().toString());
         resp.put("groupId", session.getGroupId().toString());
@@ -574,6 +777,31 @@ public class GroupController {
         session.setEndsAt(endsAt);
         studySessionRepository.save(session);
 
+        // Send session-updated email notification to approved members with role "member"
+        try {
+            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
+            String ownerName = owner != null
+                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
+                : "Group Owner";
+            String ownerEmail = owner != null ? owner.getEmail() : "";
+            String[] memberEmails = getApprovedMemberEmails(group.getId());
+            if (memberEmails.length > 0) {
+                emailService.sendSessionUpdated(
+                    memberEmails,
+                    group.getName() != null ? group.getName() : "",
+                    session.getTitle(),
+                    formatSchedule(session.getStartsAt()),
+                    session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
+                    session.getLocation(),
+                    session.getMeetingLink(),
+                    ownerName,
+                    ownerEmail
+                );
+            }
+        } catch (Exception emailEx) {
+            log.warn("[UpdateSession] Failed to send session-updated emails for session {} in group {}: {}", sessionId, id, emailEx.getMessage());
+        }
+
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("id", session.getId().toString());
         resp.put("groupId", session.getGroupId().toString());
@@ -599,7 +827,34 @@ public class GroupController {
         if (session == null || !id.equals(session.getGroupId())) {
             return ResponseEntity.status(404).body(Map.of("error", "Session not found"));
         }
+        // Capture session details before deletion for email
+        String deletedTitle = session.getTitle();
+        String deletedStartsAt = formatSchedule(session.getStartsAt());
+
         studySessionRepository.delete(session);
+
+        // Send session-deleted email notification to approved members with role "member"
+        try {
+            User owner = userRepository.findById(group.getCreatedBy()).orElse(null);
+            String ownerName = owner != null
+                ? ((owner.getFirstName() + " " + owner.getLastName()).trim())
+                : "Group Owner";
+            String ownerEmail = owner != null ? owner.getEmail() : "";
+            String[] memberEmails = getApprovedMemberEmails(group.getId());
+            if (memberEmails.length > 0) {
+                emailService.sendSessionDeleted(
+                    memberEmails,
+                    group.getName() != null ? group.getName() : "",
+                    deletedTitle,
+                    deletedStartsAt,
+                    ownerName,
+                    ownerEmail
+                );
+            }
+        } catch (Exception emailEx) {
+            log.warn("[DeleteSession] Failed to send session-deleted emails for session {} in group {}: {}", sessionId, id, emailEx.getMessage());
+        }
+
         return ResponseEntity.ok(Map.of("deleted", true));
     }
 
@@ -671,6 +926,28 @@ public class GroupController {
     private boolean isMember(UUID groupId, UUID userId) {
         StudyGroupMember membership = groupMemberRepository.findByGroupIdAndUserId(groupId, userId).orElse(null);
         return membership != null && "approved".equalsIgnoreCase(membership.getMembershipStatus());
+    }
+
+    /**
+     * Return emails of approved members with role "member" only (excludes owner/admin).
+     */
+    private String[] getApprovedMemberEmails(UUID groupId) {
+        List<StudyGroupMember> allMembers = groupMemberRepository.findByGroupId(groupId);
+        return allMembers.stream()
+            .filter(m -> "member".equalsIgnoreCase(m.getRole())
+                      && "approved".equalsIgnoreCase(m.getMembershipStatus()))
+            .map(m -> userRepository.findById(m.getUserId()).map(User::getEmail).orElse(null))
+            .filter(e -> e != null && !e.isBlank())
+            .toArray(String[]::new);
+    }
+
+    /**
+     * Format a LocalDateTime as "DD-MON-YYYY at HH:mm" (e.g. "20-JAN-2025 at 15:30").
+     */
+    private String formatSchedule(LocalDateTime dt) {
+        if (dt == null) return "Not specified";
+        return dt.format(DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH)).toUpperCase(Locale.ENGLISH)
+             + " at " + dt.format(DateTimeFormatter.ofPattern("HH:mm"));
     }
 
     private void refreshGroupStatus(StudyGroup group) {
