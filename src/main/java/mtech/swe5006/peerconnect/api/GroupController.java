@@ -1,5 +1,7 @@
 package mtech.swe5006.peerconnect.api;
 
+import mtech.swe5006.peerconnect.data.sql.PeerFeedback;
+import mtech.swe5006.peerconnect.data.sql.PeerFeedbackRepository;
 import mtech.swe5006.peerconnect.data.sql.StudyGroup;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMember;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMemberRepository;
@@ -31,21 +33,31 @@ import java.util.stream.Collectors;
 public class GroupController {
 
     private static final Logger log = LoggerFactory.getLogger(GroupController.class);
+    private static final String SESSION_NOT_FOUND = "Session not found";
+    private static final String OVERALL_RATING = "overallRating";
+    private static final String PREPAREDNESS = "preparedness";
+    private static final String COMMUNICATION = "communication";
+    private static final String HELPFULNESS = "helpfulness";
+    private static final String CREATED_AT = "createdAt";
+    private static final String RELIABILITY = "reliability";
 
     private final StudyGroupRepository groupRepository;
     private final StudyGroupMemberRepository groupMemberRepository;
     private final StudySessionRepository studySessionRepository;
+    private final PeerFeedbackRepository peerFeedbackRepository;
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
 
     public GroupController(StudyGroupRepository groupRepository,
                            StudyGroupMemberRepository groupMemberRepository,
                            StudySessionRepository studySessionRepository,
+                           PeerFeedbackRepository peerFeedbackRepository,
                            UserRepository userRepository,
                            JdbcTemplate jdbcTemplate) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.studySessionRepository = studySessionRepository;
+        this.peerFeedbackRepository = peerFeedbackRepository;
         this.userRepository = userRepository;
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -464,6 +476,7 @@ public class GroupController {
         if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can delete group"));
 
         try {
+            peerFeedbackRepository.deleteByGroupId(id);
             jdbcTemplate.update("DELETE FROM study_sessions WHERE group_id = ?", id.toString());
             jdbcTemplate.update("DELETE FROM study_group_members WHERE group_id = ?", id.toString());
             jdbcTemplate.update("DELETE FROM study_groups WHERE id = ?", id.toString());
@@ -552,7 +565,7 @@ public class GroupController {
 
         StudySession session = studySessionRepository.findById(sessionId).orElse(null);
         if (session == null || !id.equals(session.getGroupId())) {
-            return ResponseEntity.status(404).body(Map.of("error", "Session not found"));
+            return ResponseEntity.status(404).body(Map.of("error", SESSION_NOT_FOUND));
         }
 
         String title = firstNonBlank(asString(body.get("title")), session.getTitle());
@@ -597,10 +610,67 @@ public class GroupController {
 
         StudySession session = studySessionRepository.findById(sessionId).orElse(null);
         if (session == null || !id.equals(session.getGroupId())) {
-            return ResponseEntity.status(404).body(Map.of("error", "Session not found"));
+            return ResponseEntity.status(404).body(Map.of("error", SESSION_NOT_FOUND));
         }
+        peerFeedbackRepository.deleteBySessionId(sessionId);
         studySessionRepository.delete(session);
         return ResponseEntity.ok(Map.of("deleted", true));
+    }
+
+    @PostMapping("/{groupId}/sessions/{sessionId}/feedback")
+    public ResponseEntity<Map<String, Object>> submitFeedback(@PathVariable UUID groupId,
+                                                              @PathVariable UUID sessionId,
+                                                              Authentication auth,
+                                                              @RequestBody Map<String, Object> body) {
+        User reviewer = getCurrentUser(auth);
+        if (auth == null || reviewer == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Authentication required"));
+        }
+
+        StudyGroup group = groupRepository.findById(groupId).orElse(null);
+        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
+
+        StudyGroupMember reviewerMembership = groupMemberRepository.findByGroupIdAndUserId(groupId, reviewer.getId()).orElse(null);
+        if (!isApprovedMembership(reviewerMembership)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Reviewer must be an approved member of the group"));
+        }
+
+        StudySession session = studySessionRepository.findById(sessionId).orElse(null);
+        ResponseEntity<Map<String, Object>> sessionValidationError = validateFeedbackSession(groupId, sessionId, session);
+        if (sessionValidationError != null) return sessionValidationError;
+
+        ResponseEntity<Map<String, Object>> payloadValidationError = validateFeedbackPayloadIds(groupId, sessionId, body);
+        if (payloadValidationError != null) return payloadValidationError;
+
+        UUID revieweeId = parseUuid(asString(body.get("revieweeId")));
+        if (revieweeId == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "revieweeId is required"));
+        }
+        if (reviewer.getId().equals(revieweeId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "You cannot submit feedback for yourself"));
+        }
+
+        StudyGroupMember revieweeMembership = groupMemberRepository.findByGroupIdAndUserId(groupId, revieweeId).orElse(null);
+        if (!isApprovedMembership(revieweeMembership)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Reviewee must be an approved member of the group"));
+        }
+
+        User reviewee = userRepository.findById(revieweeId).orElse(null);
+        if (reviewee == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Reviewee not found"));
+        }
+
+        String ratingError = validateFeedbackRatings(body);
+        if (ratingError != null) return ResponseEntity.badRequest().body(Map.of("error", ratingError));
+
+        if (peerFeedbackRepository.existsBySessionIdAndReviewerIdAndRevieweeId(sessionId, reviewer.getId(), revieweeId)) {
+            return ResponseEntity.status(409).body(Map.of("error", "Feedback has already been submitted for this peer and session"));
+        }
+
+        PeerFeedback feedback = buildPeerFeedback(groupId, sessionId, reviewer.getId(), revieweeId, body);
+        peerFeedbackRepository.save(feedback);
+
+        return ResponseEntity.ok(buildFeedbackResponse(groupId, sessionId, revieweeId, reviewee, feedback));
     }
 
     @GetMapping("/{id}")
@@ -634,7 +704,7 @@ public class GroupController {
                 row.put("moduleCode", g.getModuleCode());
                 row.put("status", g.getStatus());
                 row.put("createdBy", g.getCreatedBy());
-                row.put("createdAt", g.getCreatedAt());
+                row.put(CREATED_AT, g.getCreatedAt());
                 return row;
             }).toList();
             return ResponseEntity.ok(Map.of(
@@ -671,6 +741,74 @@ public class GroupController {
     private boolean isMember(UUID groupId, UUID userId) {
         StudyGroupMember membership = groupMemberRepository.findByGroupIdAndUserId(groupId, userId).orElse(null);
         return membership != null && "approved".equalsIgnoreCase(membership.getMembershipStatus());
+    }
+
+    private boolean isApprovedMembership(StudyGroupMember membership) {
+        return membership != null && "approved".equalsIgnoreCase(membership.getMembershipStatus());
+    }
+
+    private ResponseEntity<Map<String, Object>> validateFeedbackSession(UUID groupId, UUID sessionId, StudySession session) {
+        if (session == null) return ResponseEntity.status(404).body(Map.of("error", SESSION_NOT_FOUND));
+        if (!groupId.equals(session.getGroupId())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Session does not belong to the specified group"));
+        }
+        if (session.getStartsAt() == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Feedback can only be submitted for scheduled sessions"));
+        }
+        return null;
+    }
+
+    private ResponseEntity<Map<String, Object>> validateFeedbackPayloadIds(UUID groupId, UUID sessionId, Map<String, Object> body) {
+        UUID bodyGroupId = parseUuid(asString(body.get("groupId")));
+        if (bodyGroupId != null && !groupId.equals(bodyGroupId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "groupId in payload must match the route"));
+        }
+
+        UUID bodySessionId = parseUuid(asString(body.get("sessionId")));
+        if (bodySessionId != null && !sessionId.equals(bodySessionId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "sessionId in payload must match the route"));
+        }
+        return null;
+    }
+
+    private String validateFeedbackRatings(Map<String, Object> body) {
+        List<String> ratingFields = List.of(OVERALL_RATING, PREPAREDNESS, COMMUNICATION, HELPFULNESS, RELIABILITY);
+        for (String ratingField : ratingFields) {
+            String ratingError = validateRating(ratingField, body.get(ratingField));
+            if (ratingError != null) {
+                return ratingError;
+            }
+        }
+        return null;
+    }
+
+    private PeerFeedback buildPeerFeedback(UUID groupId, UUID sessionId, UUID reviewerId, UUID revieweeId, Map<String, Object> body) {
+        PeerFeedback feedback = new PeerFeedback();
+        feedback.setGroupId(groupId);
+        feedback.setSessionId(sessionId);
+        feedback.setReviewerId(reviewerId);
+        feedback.setRevieweeId(revieweeId);
+        feedback.setOverallRating(asShort(body.get(OVERALL_RATING), null));
+        feedback.setPreparedness(asShort(body.get(PREPAREDNESS), null));
+        feedback.setCommunication(asShort(body.get(COMMUNICATION), null));
+        feedback.setHelpfulness(asShort(body.get(HELPFULNESS), null));
+        feedback.setReliability(asShort(body.get(RELIABILITY), null));
+        feedback.setStrengths(asString(body.get("strengths")));
+        feedback.setImprovements(asString(body.get("improvements")));
+        feedback.setAnonymousToPeer(asBoolean(body.get("anonymousToPeer"), false));
+        return feedback;
+    }
+
+    private Map<String, Object> buildFeedbackResponse(UUID groupId, UUID sessionId, UUID revieweeId, User reviewee, PeerFeedback feedback) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", feedback.getId() != null ? feedback.getId().toString() : null);
+        response.put("groupId", groupId.toString());
+        response.put("sessionId", sessionId.toString());
+        response.put("revieweeId", revieweeId.toString());
+        response.put("revieweeName", buildDisplayName(reviewee));
+        response.put("anonymousToPeer", Boolean.TRUE.equals(feedback.getAnonymousToPeer()));
+        response.put(CREATED_AT, feedback.getCreatedAt() != null ? feedback.getCreatedAt().toString() : null);
+        return response;
     }
 
     private void refreshGroupStatus(StudyGroup group) {
@@ -736,7 +874,7 @@ public class GroupController {
         row.put("maxMembers", group.getMaxMembers());
         row.put("status", group.getStatus());
         row.put("approvalRequired", Boolean.TRUE.equals(group.getApprovalRequired()));
-        row.put("createdAt", group.getCreatedAt());
+        row.put(CREATED_AT, group.getCreatedAt());
         row.put("memberCount", approvedCount);
         row.put("pendingCount", pendingCount);
         row.put("joined", currentMembership != null && "approved".equalsIgnoreCase(currentMembership.getMembershipStatus()));
@@ -806,6 +944,21 @@ public class GroupController {
         if (value == null) return defaultValue;
         if (value instanceof Boolean b) return b;
         return "true".equalsIgnoreCase(String.valueOf(value));
+    }
+
+    private String validateRating(String fieldName, Object value) {
+        Short rating = asShort(value, null);
+        if (rating == null) return fieldName + " is required";
+        if (rating < 1 || rating > 5) return fieldName + " must be between 1 and 5";
+        return null;
+    }
+
+    private String buildDisplayName(User user) {
+        if (user == null) return null;
+        String firstName = user.getFirstName() != null ? user.getFirstName().trim() : "";
+        String lastName = user.getLastName() != null ? user.getLastName().trim() : "";
+        String fullName = (firstName + " " + lastName).trim();
+        return fullName.isBlank() ? user.getEmail() : fullName;
     }
 
     private UUID parseUuid(String value) {
@@ -1049,4 +1202,3 @@ public class GroupController {
         }
     }
 }
-

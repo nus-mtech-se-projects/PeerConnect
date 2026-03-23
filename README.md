@@ -10,6 +10,8 @@ Run locally:
 ./gradlew bootRun
 ```
 
+If `bootRun` fails on Azure SQL schema validation for `peer_feedback` or `study_groups.preferred_schedule`, apply [data/migrations/2026-03-21_repair_azure_sql_schema.sql](data/migrations/2026-03-21_repair_azure_sql_schema.sql) to the target database first.
+
 Build a runnable jar:
 ```
 ./gradlew build
