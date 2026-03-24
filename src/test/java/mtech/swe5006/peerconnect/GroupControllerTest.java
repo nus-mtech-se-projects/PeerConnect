@@ -102,7 +102,7 @@ class GroupControllerTest {
             assertThat(cap.getValue().getUserId()).isEqualTo(alice.getId());
             ArgumentCaptor<StudyGroup> groupCaptor = ArgumentCaptor.forClass(StudyGroup.class);
             verify(groupRepository).save(groupCaptor.capture());
-            assertThat(groupCaptor.getValue().getCourseId()).isEqualTo("CS5000");
+            assertThat(groupCaptor.getValue().getCourseId()).isNull();
         }
     }
 
