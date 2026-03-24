@@ -104,6 +104,7 @@ public class TutoringController {
             return ResponseEntity.status(403).body(Map.of("error", "Not authorized to delete this tutoring class"));
         }
 
+        peerFeedbackRepository.deleteByPeerTutorGroupId(id);
         tutoringEnrollmentRepository.deleteByClassId(id);
         tutoringClassRepository.delete(tutoringClass);
         return ResponseEntity.ok(Map.of("deleted", true));
@@ -232,7 +233,7 @@ public class TutoringController {
         }
 
         PeerFeedback feedback = new PeerFeedback();
-        feedback.setGroupId(id);
+        feedback.setPeerTutorGroupId(id);
         feedback.setSessionId(id);
         feedback.setReviewerId(reviewer.getId());
         feedback.setRevieweeId(revieweeId);
@@ -265,7 +266,7 @@ public class TutoringController {
             return ResponseEntity.status(403).body(Map.of("error", "Only the tutor can view submitted feedback"));
         }
 
-        List<Map<String, Object>> payload = peerFeedbackRepository.findByGroupIdOrderByCreatedAtDesc(id)
+        List<Map<String, Object>> payload = peerFeedbackRepository.findByPeerTutorGroupIdOrderByCreatedAtDesc(id)
             .stream()
             .map(feedback -> {
                 User reviewer = userRepository.findById(feedback.getReviewerId()).orElse(null);
@@ -273,7 +274,7 @@ public class TutoringController {
 
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id", feedback.getId() != null ? feedback.getId().toString() : null);
-                row.put("groupId", feedback.getGroupId() != null ? feedback.getGroupId().toString() : null);
+                row.put("peerTutorGroupId", feedback.getPeerTutorGroupId() != null ? feedback.getPeerTutorGroupId().toString() : null);
                 row.put("sessionId", feedback.getSessionId() != null ? feedback.getSessionId().toString() : null);
                 row.put("revieweeId", feedback.getRevieweeId() != null ? feedback.getRevieweeId().toString() : null);
                 row.put("revieweeName", displayName(reviewee));
@@ -332,7 +333,7 @@ public class TutoringController {
     private Map<String, Object> buildFeedbackResponse(UUID groupId, UUID sessionId, UUID revieweeId, User reviewee, PeerFeedback feedback) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", feedback.getId() != null ? feedback.getId().toString() : null);
-        response.put("groupId", groupId.toString());
+        response.put("peerTutorGroupId", groupId.toString());
         response.put("sessionId", sessionId.toString());
         response.put("revieweeId", revieweeId.toString());
         String revieweeName = (firstNonBlank(reviewee.getFirstName(), "") + " " + firstNonBlank(reviewee.getLastName(), "")).trim();

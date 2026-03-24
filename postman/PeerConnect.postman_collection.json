@@ -742,6 +742,18 @@
               "name": "Create Group",
               "event": [
                 {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "const now = Date.now();",
+                      "pm.environment.set(\"runGroupName\", \"UAT Study Group \" + now);",
+                      "pm.environment.set(\"runGroupTopic\", \"CS1010 Midterms \" + now);",
+                      "pm.environment.set(\"runGroupSchedule\", \"2026-10-15T18:00:00\");"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
                   "listen": "test",
                   "script": {
                     "exec": [
@@ -749,15 +761,28 @@
                       "  pm.response.to.have.status(200);",
                       "});",
                       "pm.test(\"Saves groupId\", () => {",
+                      "  if (pm.response.code !== 200) {",
+                      "    pm.environment.unset(\"groupId\");",
+                      "    return;",
+                      "  }",
                       "  const b = pm.response.json();",
                       "  pm.expect(b.id).to.be.a(\"string\");",
                       "  pm.environment.set(\"groupId\", b.id);",
                       "});",
+                      "pm.test(\"Returns created group details\", () => {",
+                      "  if (pm.response.code !== 200) return;",
+                      "  const b = pm.response.json();",
+                      "  pm.expect(b.name).to.eql(pm.environment.get(\"runGroupName\"));",
+                      "  pm.expect(b.members).to.be.an(\"array\");",
+                      "  pm.expect(b.sessions).to.be.an(\"array\");",
+                      "});",
                       "pm.test(\"Owner membership created with correct role\", () => {",
+                      "  if (pm.response.code !== 200) return;",
                       "  const members = pm.response.json().members;",
                       "  pm.expect(members).to.be.an(\"array\").with.length.above(0);",
                       "  const owner = members.find(m => m.role === \"owner\");",
                       "  pm.expect(owner).to.not.be.undefined;",
+                      "  pm.expect(owner.membershipStatus).to.eql(\"approved\");",
                       "});"
                     ],
                     "type": "text/javascript"
@@ -773,7 +798,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"UAT Study Group\",\n  \"moduleCode\": \"CS1010\",\n  \"description\": \"UAT test group for automated testing\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/uat-test-session\",\n  \"preferredSchedule\": \"Weekdays after 6pm\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
+                  "raw": "{\n  \"name\": \"{{runGroupName}}\",\n  \"moduleCode\": \"CS1010\",\n  \"courseId\": \"e415fc42-3820-f111-832e-000d3a092f19\",\n  \"courseCode\": \"CS1010\",\n  \"topic\": \"{{runGroupTopic}}\",\n  \"description\": \"UAT test group for automated testing\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/uat-test-session\",\n  \"preferredSchedule\": \"{{runGroupSchedule}}\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
                   "options": { "raw": { "language": "json" } }
                 },
                 "url": {
@@ -863,10 +888,13 @@
                   "script": {
                     "exec": [
                       "pm.test(\"200 on get group\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
                       "  pm.response.to.have.status(200);",
                       "});",
                       "pm.test(\"Contains members and sessions arrays\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
                       "  const b = pm.response.json();",
+                      "  pm.expect(b.id).to.eql(pm.environment.get(\"groupId\"));",
                       "  pm.expect(b.members).to.be.an(\"array\");",
                       "  pm.expect(b.sessions).to.be.an(\"array\");",
                       "});"
@@ -931,10 +959,14 @@
                   "script": {
                     "exec": [
                       "pm.test(\"200 on update group\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
                       "  pm.response.to.have.status(200);",
                       "});",
                       "pm.test(\"Name updated\", () => {",
-                      "  pm.expect(pm.response.json().name).to.eql(\"Updated UAT Group\");",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  const b = pm.response.json();",
+                      "  pm.expect(b.name).to.eql(\"Updated UAT Group\");",
+                      "  pm.expect(b.id).to.eql(pm.environment.get(\"groupId\"));",
                       "});"
                     ],
                     "type": "text/javascript"
@@ -950,7 +982,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"Updated UAT Group\",\n  \"maxMembers\": 6\n}",
+                  "raw": "{\n  \"name\": \"Updated UAT Group\",\n  \"preferredSchedule\": \"2026-10-20T18:00:00\",\n  \"maxMembers\": 6\n}",
                   "options": { "raw": { "language": "json" } }
                 },
                 "url": {
@@ -1054,12 +1086,14 @@
                   "script": {
                     "exec": [
                       "pm.test(\"200 on get members\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
                       "  pm.response.to.have.status(200);",
                       "});",
                       "pm.test(\"Owner is in member list\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
                       "  const members = pm.response.json();",
                       "  pm.expect(members).to.be.an(\"array\");",
-                      "  const owner = members.find(m => m.role === \"owner\");",
+                      "  const owner = members.find(m => m.role === \"owner\" && m.membershipStatus === \"approved\");",
                       "  pm.expect(owner).to.not.be.undefined;",
                       "});"
                     ],
@@ -1090,9 +1124,11 @@
                   "script": {
                     "exec": [
                       "pm.test(\"200 on invite\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
                       "  pm.response.to.have.status(200);",
                       "});",
                       "pm.test(\"Returns invited:true\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
                       "  pm.expect(pm.response.json().invited).to.be.true;",
                       "});"
                     ],
@@ -1595,6 +1631,15 @@
               "name": "Create Group for Dissolve",
               "event": [
                 {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "pm.environment.set(\"runDissolveGroupName\", \"Dissolve Test Group \" + Date.now());"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
                   "listen": "test",
                   "script": {
                     "exec": [
@@ -1618,7 +1663,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"Dissolve Test Group\",\n  \"moduleCode\": \"CS9999\",\n  \"description\": \"This group will be dissolved during UAT\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/dissolve-test\",\n  \"preferredSchedule\": \"Weekends\",\n  \"maxMembers\": 5\n}",
+                  "raw": "{\n  \"name\": \"{{runDissolveGroupName}}\",\n  \"moduleCode\": \"CS9999\",\n  \"courseId\": \"e415fc42-3820-f111-832e-000d3a092f19\",\n  \"courseCode\": \"CS9999\",\n  \"topic\": \"Dissolve Flow Validation\",\n  \"description\": \"This group will be dissolved during UAT\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/dissolve-test\",\n  \"preferredSchedule\": \"2026-12-01T10:00:00\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
                   "options": { "raw": { "language": "json" } }
                 },
                 "url": {

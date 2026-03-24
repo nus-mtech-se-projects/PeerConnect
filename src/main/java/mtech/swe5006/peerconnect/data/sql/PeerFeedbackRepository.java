@@ -9,11 +9,8 @@ import java.util.UUID;
 public interface PeerFeedbackRepository extends JpaRepository<PeerFeedback, UUID> {
     boolean existsBySessionIdAndReviewerIdAndRevieweeId(UUID sessionId, UUID reviewerId, UUID revieweeId);
 
-    List<PeerFeedback> findByGroupIdOrderByCreatedAtDesc(UUID groupId);
+    List<PeerFeedback> findByPeerTutorGroupIdOrderByCreatedAtDesc(UUID peerTutorGroupId);
 
     @Transactional
-    void deleteByGroupId(UUID groupId);
-
-    @Transactional
-    void deleteBySessionId(UUID sessionId);
+    void deleteByPeerTutorGroupId(UUID peerTutorGroupId);
 }
