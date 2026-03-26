@@ -8,6 +8,8 @@ import mtech.swe5006.peerconnect.data.sql.TutoringEnrollment;
 import mtech.swe5006.peerconnect.data.sql.TutoringEnrollmentRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +22,8 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/tutoring")
 public class TutoringController {
+
+    private static final Logger log = LoggerFactory.getLogger(TutoringController.class);
 
     private final TutoringClassRepository tutoringClassRepository;
     private final TutoringEnrollmentRepository tutoringEnrollmentRepository;
@@ -394,5 +398,13 @@ public class TutoringController {
             if (value != null && !value.isBlank()) return value;
         }
         return null;
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleException(Exception ex) {
+        log.error("[TutoringController] Unhandled exception", ex);
+        return ResponseEntity.status(500).body(Map.of(
+            "error", ex.getMessage() != null ? ex.getMessage() : "Internal server error"
+        ));
     }
 }

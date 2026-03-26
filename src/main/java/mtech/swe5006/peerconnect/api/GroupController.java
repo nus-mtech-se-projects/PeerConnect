@@ -96,7 +96,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredScheduleStr);
+        group.setPreferredSchedule(preferredSchedule);
         group.setApprovalRequired(approvalRequired);
         group.setCreatedBy(user.getId());
         group.setStatus("active");
@@ -150,7 +150,7 @@ public class GroupController {
         String preferredScheduleStr = asString(body.get("preferredSchedule"));
         LocalDateTime preferredSchedule = body.containsKey("preferredSchedule")
             ? parseDateTime(preferredScheduleStr)
-            : parseDateTime(group.getPreferredSchedule());
+            : group.getPreferredSchedule();
         if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
         }
@@ -175,7 +175,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredScheduleStr != null ? preferredScheduleStr : group.getPreferredSchedule());
+        group.setPreferredSchedule(preferredSchedule);
         group.setMaxMembers(maxMembers);
         group.setApprovalRequired(approvalRequired);
         refreshGroupStatus(group);
@@ -723,7 +723,7 @@ public class GroupController {
         row.put("studyMode", group.getStudyMode());
         row.put("location", group.getLocation());
         row.put("meetingLink", group.getMeetingLink());
-        row.put("preferredSchedule", group.getPreferredSchedule());
+        row.put("preferredSchedule", group.getPreferredSchedule() != null ? group.getPreferredSchedule().toString() : null);
         row.put("createdBy", group.getCreatedBy());
         row.put("ownerName", owner == null ? null : ((owner.getFirstName() + " " + owner.getLastName()).trim()));
         row.put("maxMembers", group.getMaxMembers());
@@ -843,5 +843,13 @@ public class GroupController {
             if (candidate != null) return candidate;
         }
         return null;
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleException(Exception ex) {
+        log.error("[GroupController] Unhandled exception", ex);
+        return ResponseEntity.status(500).body(Map.of(
+            "error", ex.getMessage() != null ? ex.getMessage() : "Internal server error"
+        ));
     }
 }

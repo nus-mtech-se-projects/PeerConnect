@@ -5,8 +5,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "tutoring_courses", indexes = {
-    @Index(name = "IX_tutoring_courses_discovery", columnList = "module_code, created_at")
+@Table(name = "tutoring_classes", indexes = {
+    @Index(name = "IX_tutoring_classes_discovery", columnList = "module_code, created_at")
 })
 public class TutoringClass {
 

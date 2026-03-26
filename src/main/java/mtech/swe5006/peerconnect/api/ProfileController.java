@@ -5,6 +5,8 @@ import mtech.swe5006.peerconnect.data.sql.ProfileRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import mtech.swe5006.peerconnect.service.AzureBlobService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/profile")
 public class ProfileController {
+
+    private static final Logger log = LoggerFactory.getLogger(ProfileController.class);
 
     private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024; // 2 MB
     private static final List<String> ALLOWED_TYPES = List.of("image/png", "image/jpeg");
@@ -208,5 +212,13 @@ public class ProfileController {
             return ResponseEntity.status(500)
                     .body(Map.of("error", "Delete failed: " + e.getMessage()));
         }
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleException(Exception ex) {
+        log.error("[ProfileController] Unhandled exception", ex);
+        return ResponseEntity.status(500).body(Map.of(
+            "error", ex.getMessage() != null ? ex.getMessage() : "Internal server error"
+        ));
     }
 }

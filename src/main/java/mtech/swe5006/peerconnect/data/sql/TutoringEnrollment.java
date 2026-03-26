@@ -6,8 +6,8 @@ import java.util.UUID;
 
 @Entity
 @Table(
-    name = "tutoring_signup",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"course_id", "user_id"})
+    name = "tutoring_class_enrollments",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"class_id", "user_id"})
 )
 public class TutoringEnrollment {
 
@@ -15,7 +15,7 @@ public class TutoringEnrollment {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "course_id", nullable = false)
+    @Column(name = "class_id", nullable = false)
     private UUID classId;
 
     @Column(name = "user_id", nullable = false)

@@ -26,7 +26,7 @@ public class Profile {
     @Column(name = "avatar_url", length = 2048)
     private String avatarUrl;
 
-    @Column(name = "full_time_ind", length = 1)
+    @Transient
     private String fullTimeInd;
 
     // ===== Getters / Setters =====

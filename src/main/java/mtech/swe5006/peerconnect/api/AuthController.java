@@ -329,4 +329,11 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
   }
 
   public record ChangePasswordRequest(String code, String newPassword) {}
+
+  @ExceptionHandler(Exception.class)
+  public ResponseEntity<?> handleException(Exception ex) {
+    log.error("[AuthController] Unhandled exception", ex);
+    return ResponseEntity.status(500).body(Map.of(
+        "error", ex.getMessage() != null ? ex.getMessage() : "Internal server error"));
+  }
 }
