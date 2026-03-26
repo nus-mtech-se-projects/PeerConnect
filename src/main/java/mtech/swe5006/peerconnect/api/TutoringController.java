@@ -11,12 +11,9 @@ import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,18 +29,15 @@ public class TutoringController {
     private final TutoringEnrollmentRepository tutoringEnrollmentRepository;
     private final UserRepository userRepository;
     private final PeerFeedbackRepository peerFeedbackRepository;
-    private final JdbcTemplate jdbcTemplate;
 
     public TutoringController(TutoringClassRepository tutoringClassRepository,
                               TutoringEnrollmentRepository tutoringEnrollmentRepository,
                               UserRepository userRepository,
-                              PeerFeedbackRepository peerFeedbackRepository,
-                              JdbcTemplate jdbcTemplate) {
+                              PeerFeedbackRepository peerFeedbackRepository) {
         this.tutoringClassRepository = tutoringClassRepository;
         this.tutoringEnrollmentRepository = tutoringEnrollmentRepository;
         this.userRepository = userRepository;
         this.peerFeedbackRepository = peerFeedbackRepository;
-        this.jdbcTemplate = jdbcTemplate;
     }
 
     @GetMapping("/classes")
@@ -95,12 +89,7 @@ public class TutoringController {
         tutoringClass.setMaxStudents(maxStudents);
         tutoringClass.setCreatedBy(currentUser.getId());
 
-        try {
-            tutoringClassRepository.save(tutoringClass);
-        } catch (RuntimeException ex) {
-            log.warn("[TutoringController] JPA class save failed, retrying with JDBC fallback: {}", ex.getMessage());
-            saveTutoringClassCompat(tutoringClass);
-        }
+        tutoringClassRepository.save(tutoringClass);
         return ResponseEntity.ok(buildClassPayload(tutoringClass, currentUser));
     }
 
@@ -409,53 +398,6 @@ public class TutoringController {
             if (value != null && !value.isBlank()) return value;
         }
         return null;
-    }
-
-    private void saveTutoringClassCompat(TutoringClass tutoringClass) {
-        if (tutoringClass.getId() == null) tutoringClass.setId(UUID.randomUUID());
-        if (tutoringClass.getMode() == null) tutoringClass.setMode("online");
-        if (tutoringClass.getMaxStudents() == null) tutoringClass.setMaxStudents((short) 5);
-        if (tutoringClass.getCreatedAt() == null) tutoringClass.setCreatedAt(LocalDateTime.now());
-
-        List<String> columns = jdbcTemplate.queryForList(
-            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'tutoring_courses'",
-            String.class
-        ).stream().map(String::toLowerCase).toList();
-
-        List<String> insertColumns = new ArrayList<>();
-        List<String> placeholders = new ArrayList<>();
-        List<Object> values = new ArrayList<>();
-
-        addInsertColumn(columns, insertColumns, placeholders, values, "id", tutoringClass.getId().toString());
-        addInsertColumn(columns, insertColumns, placeholders, values, "title", tutoringClass.getTitle());
-        addInsertColumn(columns, insertColumns, placeholders, values, "module_code", tutoringClass.getModuleCode());
-        addInsertColumn(columns, insertColumns, placeholders, values, "topic", tutoringClass.getTopic());
-        addInsertColumn(columns, insertColumns, placeholders, values, "description", tutoringClass.getDescription());
-        addInsertColumn(columns, insertColumns, placeholders, values, "schedule", tutoringClass.getSchedule());
-        addInsertColumn(columns, insertColumns, placeholders, values, "mode", tutoringClass.getMode());
-        addInsertColumn(columns, insertColumns, placeholders, values, "location", tutoringClass.getLocation());
-        addInsertColumn(columns, insertColumns, placeholders, values, "meeting_link", tutoringClass.getMeetingLink());
-        addInsertColumn(columns, insertColumns, placeholders, values, "max_students", tutoringClass.getMaxStudents());
-        addInsertColumn(columns, insertColumns, placeholders, values, "created_by", tutoringClass.getCreatedBy().toString());
-        addInsertColumn(columns, insertColumns, placeholders, values, "created_at", tutoringClass.getCreatedAt());
-
-        jdbcTemplate.update(
-            "INSERT INTO tutoring_courses (" + String.join(", ", insertColumns) + ") VALUES (" + String.join(", ", placeholders) + ")",
-            values.toArray()
-        );
-    }
-
-    private void addInsertColumn(List<String> availableColumns,
-                                 List<String> insertColumns,
-                                 List<String> placeholders,
-                                 List<Object> values,
-                                 String column,
-                                 Object value) {
-        if (availableColumns.contains(column)) {
-            insertColumns.add(column);
-            placeholders.add("?");
-            values.add(value);
-        }
     }
 
     @ExceptionHandler(Exception.class)
