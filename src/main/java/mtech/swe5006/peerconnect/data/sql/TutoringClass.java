@@ -41,8 +41,11 @@ public class TutoringClass {
     @Column(name = "max_students")
     private Short maxStudents;
 
-    @Column(name = "tutor_id", nullable = false)
+    @Column(name = "created_by", nullable = false)
     private UUID createdBy;
+
+    @Column(name = "tutor_id", nullable = false)
+    private UUID tutorId;
 
     @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME2")
     private LocalDateTime createdAt;
@@ -52,6 +55,8 @@ public class TutoringClass {
         if (this.id == null) this.id = UUID.randomUUID();
         if (this.mode == null) this.mode = "online";
         if (this.maxStudents == null) this.maxStudents = 5;
+        if (this.createdBy == null) this.createdBy = this.tutorId;
+        if (this.tutorId == null) this.tutorId = this.createdBy;
         if (this.createdAt == null) this.createdAt = LocalDateTime.now();
     }
 
@@ -77,6 +82,8 @@ public class TutoringClass {
     public void setMaxStudents(Short maxStudents) { this.maxStudents = maxStudents; }
     public UUID getCreatedBy() { return createdBy; }
     public void setCreatedBy(UUID createdBy) { this.createdBy = createdBy; }
+    public UUID getTutorId() { return tutorId; }
+    public void setTutorId(UUID tutorId) { this.tutorId = tutorId; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

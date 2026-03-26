@@ -93,6 +93,7 @@ public class TutoringController {
         tutoringClass.setMeetingLink(meetingLink);
         tutoringClass.setMaxStudents(maxStudents);
         tutoringClass.setCreatedBy(currentUser.getId());
+        tutoringClass.setTutorId(currentUser.getId());
 
         try {
             tutoringClassRepository.save(tutoringClass);
@@ -425,8 +426,8 @@ public class TutoringController {
             """
             INSERT INTO tutoring_courses
                 (id, title, module_code, topic, description, schedule, mode, location,
-                 meeting_link, max_students, tutor_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 meeting_link, max_students, created_by, tutor_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tutoringClass.getId().toString(),
             tutoringClass.getTitle(),
@@ -439,6 +440,7 @@ public class TutoringController {
             tutoringClass.getMeetingLink(),
             tutoringClass.getMaxStudents(),
             tutoringClass.getCreatedBy().toString(),
+            (tutoringClass.getTutorId() != null ? tutoringClass.getTutorId() : tutoringClass.getCreatedBy()).toString(),
             tutoringClass.getCreatedAt()
         );
     }

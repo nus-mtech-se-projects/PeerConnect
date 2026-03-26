@@ -24,7 +24,7 @@ public class StudyGroup {
     @Column(name = "module_code", length = 50)
     private String moduleCode;
 
-    @Transient
+    @Column(name = "course_id")
     private UUID courseId;
 
     @Column(name = "description", length = 2000)

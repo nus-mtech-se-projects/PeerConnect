@@ -865,14 +865,15 @@ public class GroupController {
         jdbcTemplate.update(
             """
             INSERT INTO study_groups
-                (id, topic, name, module_code, description, meeting_link, preferred_schedule,
+                (id, topic, name, module_code, course_id, description, meeting_link, preferred_schedule,
                  study_mode, location, created_by, max_members, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             group.getId().toString(),
             group.getTopic(),
             group.getName(),
             group.getModuleCode(),
+            group.getCourseId() != null ? group.getCourseId().toString() : null,
             group.getDescription(),
             group.getMeetingLink(),
             preferredSchedule,
