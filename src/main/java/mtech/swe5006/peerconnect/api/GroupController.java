@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -67,7 +68,7 @@ public class GroupController {
 
         String name = asString(body.get("name"));
         String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")));
-        UUID courseId = firstValidUuid(asString(body.get("courseId")), asString(body.get("courseCode")));
+        UUID courseId = resolveCourseId(body, moduleCode);
         String description = asString(body.get("description"));
         String topic = firstNonBlank(asString(body.get("topic")), moduleCode);
         String studyMode = firstNonBlank(asString(body.get("studyMode")), "online").toLowerCase();
@@ -82,7 +83,7 @@ public class GroupController {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
         }
 
-        String validationError = validateGroupInput(name, moduleCode, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
+        String validationError = validateGroupInput(name, moduleCode, courseId, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
         if (validationError != null) {
             return ResponseEntity.badRequest().body(Map.of("error", validationError));
         }
@@ -143,10 +144,9 @@ public class GroupController {
 
         String name = firstNonBlank(asString(body.get("name")), group.getName());
         String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")), group.getModuleCode());
-        UUID courseId = firstNonNull(
-            firstValidUuid(asString(body.get("courseId")), asString(body.get("courseCode"))),
-            group.getCourseId()
-        );
+        UUID courseId = body.containsKey("courseId") || body.containsKey("courseCode")
+            ? resolveCourseId(body, moduleCode)
+            : group.getCourseId();
         String description = firstNonBlank(asString(body.get("description")), group.getDescription());
         String topic = firstNonBlank(asString(body.get("topic")), group.getTopic());
         String studyMode = firstNonBlank(asString(body.get("studyMode")), group.getStudyMode()).toLowerCase();
@@ -164,7 +164,7 @@ public class GroupController {
             ? asBoolean(body.get("approvalRequired"), false)
             : Boolean.TRUE.equals(group.getApprovalRequired());
 
-        String validationError = validateGroupInput(name, moduleCode, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
+        String validationError = validateGroupInput(name, moduleCode, courseId, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
         if (validationError != null) return ResponseEntity.badRequest().body(Map.of("error", validationError));
 
         long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), "approved");
@@ -690,6 +690,7 @@ public class GroupController {
 
     private String validateGroupInput(String name,
                                       String moduleCode,
+                                      UUID courseId,
                                       String description,
                                       String studyMode,
                                       String location,
@@ -855,6 +856,13 @@ public class GroupController {
             if (candidate != null) return candidate;
         }
         return null;
+    }
+
+    private UUID resolveCourseId(Map<String, Object> body, String moduleCode) {
+        UUID explicitCourseId = firstValidUuid(asString(body.get("courseId")), asString(body.get("courseCode")));
+        if (explicitCourseId != null) return explicitCourseId;
+        if (moduleCode == null || moduleCode.isBlank()) return null;
+        return UUID.nameUUIDFromBytes(("course:" + moduleCode.trim().toUpperCase()).getBytes(StandardCharsets.UTF_8));
     }
 
     private void saveStudyGroupFallback(StudyGroup group, LocalDateTime preferredSchedule) {
