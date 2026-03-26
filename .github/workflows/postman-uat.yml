@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: 'Target environment base URL (overrides default)'
+        description: 'Target environment base URL (overrides default live site URL)'
         required: false
         default: ''
 
 env:
-  BASE_URL: ${{ github.event.inputs.base_url || vars.AZURE_WEBAPP_URL }}
+  BASE_URL: ${{ github.event.inputs.base_url || vars.AZURE_STATIC_WEB_APP_URL || 'https://salmon-island-0f8625f00.6.azurestaticapps.net' }}
 
 jobs:
   postman-uat:
@@ -30,7 +30,7 @@ jobs:
       - name: Validate target URL
         run: |
           if [ -z "${{ env.BASE_URL }}" ]; then
-            echo "No target URL provided. Set the AZURE_WEBAPP_URL repository variable or pass base_url as an input."
+            echo "No target URL provided. Set the AZURE_STATIC_WEB_APP_URL repository variable or pass base_url as an input."
             exit 1
           fi
           echo "Running UAT against: ${{ env.BASE_URL }}"
@@ -61,7 +61,7 @@ jobs:
             --env-var "baseUrl=${{ env.BASE_URL }}" \
             --reporters cli,htmlextra \
             --reporter-htmlextra-export postman-uat-report.html \
-            --reporter-htmlextra-title "PeerConnect UAT Report" \
+            --reporter-htmlextra-title "PeerConnect UAT Report - ${{ env.BASE_URL }}" \
             --timeout-request 30000 \
             --timeout-script 10000
       - name: Upload UAT report
