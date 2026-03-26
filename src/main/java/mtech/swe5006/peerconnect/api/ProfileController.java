@@ -35,6 +35,9 @@ public class ProfileController {
 
     @GetMapping
     public ResponseEntity<?> getProfile(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Authentication required"));
+        }
         String email = auth.getName();
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
@@ -62,6 +65,9 @@ public class ProfileController {
 
     @PutMapping
     public ResponseEntity<?> updateProfile(Authentication auth, @RequestBody Map<String, Object> body) {
+        if (auth == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Authentication required"));
+        }
         String email = auth.getName();
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
@@ -108,6 +114,9 @@ public class ProfileController {
     @PostMapping("/avatar")
     public ResponseEntity<?> uploadAvatar(Authentication auth,
                                           @RequestParam("avatar") MultipartFile file) {
+        if (auth == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Authentication required"));
+        }
         // Validate file
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "No file provided"));
@@ -160,6 +169,9 @@ public class ProfileController {
 
     @DeleteMapping("/avatar")
     public ResponseEntity<?> deleteAvatar(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Authentication required"));
+        }
         String email = auth.getName();
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {

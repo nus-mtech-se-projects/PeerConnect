@@ -13,7 +13,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "peer_feedback", indexes = {
-    @Index(name = "IX_peer_feedback_group_session", columnList = "peer_tutor_group_id, session_id"),
+    @Index(name = "IX_peer_feedback_group_session", columnList = "group_id, session_id"),
     @Index(name = "IX_peer_feedback_reviewee_session", columnList = "reviewee_id, session_id")
 }, uniqueConstraints = {
     @UniqueConstraint(name = "UQ_peer_feedback_submission", columnNames = {"session_id", "reviewer_id", "reviewee_id"})
@@ -24,7 +24,7 @@ public class PeerFeedback {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "peer_tutor_group_id", nullable = false)
+    @Column(name = "group_id", nullable = false)
     private UUID peerTutorGroupId;
 
     @Column(name = "session_id", nullable = false)
