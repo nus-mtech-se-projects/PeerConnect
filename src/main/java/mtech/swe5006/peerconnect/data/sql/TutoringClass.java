@@ -41,7 +41,7 @@ public class TutoringClass {
     @Column(name = "max_students")
     private Short maxStudents;
 
-    @Column(name = "created_by", nullable = false)
+    @Column(name = "tutor_id", nullable = false)
     private UUID createdBy;
 
     @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME2")

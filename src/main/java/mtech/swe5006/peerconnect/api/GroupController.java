@@ -96,7 +96,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredScheduleStr);
+        group.setPreferredSchedule(preferredSchedule);
         group.setApprovalRequired(approvalRequired);
         group.setCreatedBy(user.getId());
         group.setStatus("active");
@@ -107,8 +107,13 @@ public class GroupController {
             groupRepository.save(group);
             log.info("[StudyGroup] Successfully saved group id={} into dbo.study_groups", group.getId());
         } catch (Exception ex) {
-            log.error("[StudyGroup] FAILED to save group into dbo.study_groups: {}", ex.getMessage(), ex);
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to save study group: " + ex.getMessage()));
+            log.warn("[StudyGroup] JPA save failed, retrying with JDBC fallback: {}", ex.getMessage());
+            try {
+                saveStudyGroupFallback(group, preferredSchedule);
+            } catch (Exception fallbackEx) {
+                log.error("[StudyGroup] FAILED to save group into dbo.study_groups: {}", fallbackEx.getMessage(), fallbackEx);
+                return ResponseEntity.status(500).body(Map.of("error", "Failed to save study group: " + fallbackEx.getMessage()));
+            }
         }
 
         StudyGroupMember ownerMembership = new StudyGroupMember();
@@ -150,7 +155,7 @@ public class GroupController {
         String preferredScheduleStr = asString(body.get("preferredSchedule"));
         LocalDateTime preferredSchedule = body.containsKey("preferredSchedule")
             ? parseDateTime(preferredScheduleStr)
-            : parseDateTime(group.getPreferredSchedule());
+            : group.getPreferredSchedule();
         if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
         }
@@ -175,7 +180,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredScheduleStr != null ? preferredScheduleStr : group.getPreferredSchedule());
+        group.setPreferredSchedule(body.containsKey("preferredSchedule") ? preferredSchedule : group.getPreferredSchedule());
         group.setMaxMembers(maxMembers);
         group.setApprovalRequired(approvalRequired);
         refreshGroupStatus(group);
@@ -437,12 +442,19 @@ public class GroupController {
         StudyGroup group = groupRepository.findById(id).orElse(null);
         if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
         if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can dissolve group"));
+        if ("dissolved".equalsIgnoreCase(group.getStatus())) return ResponseEntity.ok(Map.of("dissolved", true));
 
         try {
-            jdbcTemplate.update("UPDATE study_groups SET status = 'dissolved' WHERE id = ?", group.getId().toString());
+            group.setStatus("dissolved");
+            groupRepository.save(group);
         } catch (Exception ex) {
-            log.error("[Dissolve] DB error for group {}: {}", id, ex.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group. Please try again."));
+            log.warn("[Dissolve] JPA save failed for group {}. Retrying with SQL. Cause: {}", id, ex.getMessage());
+            try {
+                jdbcTemplate.update("UPDATE study_groups SET status = ? WHERE id = ?", "dissolved", group.getId());
+            } catch (Exception fallbackEx) {
+                log.error("[Dissolve] DB error for group {}: {}", id, fallbackEx.getMessage());
+                return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group. Please try again."));
+            }
         }
         return ResponseEntity.ok(Map.of("dissolved", true));
     }
@@ -843,6 +855,34 @@ public class GroupController {
             if (candidate != null) return candidate;
         }
         return null;
+    }
+
+    private void saveStudyGroupFallback(StudyGroup group, LocalDateTime preferredSchedule) {
+        if (group.getId() == null) group.setId(UUID.randomUUID());
+        if (group.getStatus() == null) group.setStatus("active");
+        if (group.getCreatedAt() == null) group.setCreatedAt(LocalDateTime.now());
+
+        jdbcTemplate.update(
+            """
+            INSERT INTO study_groups
+                (id, topic, name, module_code, description, meeting_link, preferred_schedule,
+                 study_mode, location, created_by, max_members, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            group.getId().toString(),
+            group.getTopic(),
+            group.getName(),
+            group.getModuleCode(),
+            group.getDescription(),
+            group.getMeetingLink(),
+            preferredSchedule,
+            group.getStudyMode(),
+            group.getLocation(),
+            group.getCreatedBy().toString(),
+            group.getMaxMembers(),
+            group.getStatus(),
+            group.getCreatedAt()
+        );
     }
 
     @ExceptionHandler(Exception.class)

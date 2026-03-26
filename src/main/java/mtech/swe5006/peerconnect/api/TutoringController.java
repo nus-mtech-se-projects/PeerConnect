@@ -11,9 +11,11 @@ import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,15 +31,18 @@ public class TutoringController {
     private final TutoringEnrollmentRepository tutoringEnrollmentRepository;
     private final UserRepository userRepository;
     private final PeerFeedbackRepository peerFeedbackRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     public TutoringController(TutoringClassRepository tutoringClassRepository,
                               TutoringEnrollmentRepository tutoringEnrollmentRepository,
                               UserRepository userRepository,
-                              PeerFeedbackRepository peerFeedbackRepository) {
+                              PeerFeedbackRepository peerFeedbackRepository,
+                              JdbcTemplate jdbcTemplate) {
         this.tutoringClassRepository = tutoringClassRepository;
         this.tutoringEnrollmentRepository = tutoringEnrollmentRepository;
         this.userRepository = userRepository;
         this.peerFeedbackRepository = peerFeedbackRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @GetMapping("/classes")
@@ -89,7 +94,17 @@ public class TutoringController {
         tutoringClass.setMaxStudents(maxStudents);
         tutoringClass.setCreatedBy(currentUser.getId());
 
-        tutoringClassRepository.save(tutoringClass);
+        try {
+            tutoringClassRepository.save(tutoringClass);
+        } catch (Exception ex) {
+            log.warn("[TutoringController] JPA save failed, retrying with JDBC fallback: {}", ex.getMessage());
+            try {
+                saveTutoringClassFallback(tutoringClass);
+            } catch (Exception fallbackEx) {
+                log.error("[TutoringController] FAILED to save tutoring class: {}", fallbackEx.getMessage(), fallbackEx);
+                return ResponseEntity.status(500).body(Map.of("error", "Failed to save tutoring class: " + fallbackEx.getMessage()));
+            }
+        }
         return ResponseEntity.ok(buildClassPayload(tutoringClass, currentUser));
     }
 
@@ -398,6 +413,34 @@ public class TutoringController {
             if (value != null && !value.isBlank()) return value;
         }
         return null;
+    }
+
+    private void saveTutoringClassFallback(TutoringClass tutoringClass) {
+        if (tutoringClass.getId() == null) tutoringClass.setId(UUID.randomUUID());
+        if (tutoringClass.getMode() == null) tutoringClass.setMode("online");
+        if (tutoringClass.getMaxStudents() == null) tutoringClass.setMaxStudents((short) 5);
+        if (tutoringClass.getCreatedAt() == null) tutoringClass.setCreatedAt(LocalDateTime.now());
+
+        jdbcTemplate.update(
+            """
+            INSERT INTO tutoring_courses
+                (id, title, module_code, topic, description, schedule, mode, location,
+                 meeting_link, max_students, tutor_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            tutoringClass.getId().toString(),
+            tutoringClass.getTitle(),
+            tutoringClass.getModuleCode(),
+            tutoringClass.getTopic(),
+            tutoringClass.getDescription(),
+            tutoringClass.getSchedule(),
+            tutoringClass.getMode(),
+            tutoringClass.getLocation(),
+            tutoringClass.getMeetingLink(),
+            tutoringClass.getMaxStudents(),
+            tutoringClass.getCreatedBy().toString(),
+            tutoringClass.getCreatedAt()
+        );
     }
 
     @ExceptionHandler(Exception.class)
