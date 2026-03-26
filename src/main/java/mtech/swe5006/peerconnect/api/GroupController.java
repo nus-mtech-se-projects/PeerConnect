@@ -107,8 +107,13 @@ public class GroupController {
             groupRepository.save(group);
             log.info("[StudyGroup] Successfully saved group id={} into dbo.study_groups", group.getId());
         } catch (Exception ex) {
-            log.error("[StudyGroup] FAILED to save group into dbo.study_groups: {}", ex.getMessage(), ex);
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to save study group: " + ex.getMessage()));
+            log.warn("[StudyGroup] JPA save failed, retrying with JDBC fallback: {}", ex.getMessage());
+            try {
+                saveStudyGroupCompat(group);
+            } catch (Exception fallbackEx) {
+                log.error("[StudyGroup] FAILED to save group into dbo.study_groups: {}", fallbackEx.getMessage(), fallbackEx);
+                return ResponseEntity.status(500).body(Map.of("error", "Failed to save study group: " + fallbackEx.getMessage()));
+            }
         }
 
         StudyGroupMember ownerMembership = new StudyGroupMember();
@@ -843,6 +848,53 @@ public class GroupController {
             if (candidate != null) return candidate;
         }
         return null;
+    }
+
+    private void saveStudyGroupCompat(StudyGroup group) {
+        if (group.getId() == null) group.setId(UUID.randomUUID());
+        if (group.getStatus() == null) group.setStatus("active");
+        if (group.getCreatedAt() == null) group.setCreatedAt(LocalDateTime.now());
+
+        List<String> columns = jdbcTemplate.queryForList(
+            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'study_groups'",
+            String.class
+        ).stream().map(String::toLowerCase).toList();
+
+        List<String> insertColumns = new ArrayList<>();
+        List<String> placeholders = new ArrayList<>();
+        List<Object> values = new ArrayList<>();
+
+        addInsertColumn(columns, insertColumns, placeholders, values, "id", group.getId().toString());
+        addInsertColumn(columns, insertColumns, placeholders, values, "topic", group.getTopic());
+        addInsertColumn(columns, insertColumns, placeholders, values, "name", group.getName());
+        addInsertColumn(columns, insertColumns, placeholders, values, "module_code", group.getModuleCode());
+        addInsertColumn(columns, insertColumns, placeholders, values, "description", group.getDescription());
+        addInsertColumn(columns, insertColumns, placeholders, values, "meeting_link", group.getMeetingLink());
+        addInsertColumn(columns, insertColumns, placeholders, values, "preferred_schedule", group.getPreferredSchedule());
+        addInsertColumn(columns, insertColumns, placeholders, values, "study_mode", group.getStudyMode());
+        addInsertColumn(columns, insertColumns, placeholders, values, "location", group.getLocation());
+        addInsertColumn(columns, insertColumns, placeholders, values, "created_by", group.getCreatedBy().toString());
+        addInsertColumn(columns, insertColumns, placeholders, values, "max_members", group.getMaxMembers());
+        addInsertColumn(columns, insertColumns, placeholders, values, "status", group.getStatus());
+        addInsertColumn(columns, insertColumns, placeholders, values, "created_at", group.getCreatedAt());
+
+        jdbcTemplate.update(
+            "INSERT INTO study_groups (" + String.join(", ", insertColumns) + ") VALUES (" + String.join(", ", placeholders) + ")",
+            values.toArray()
+        );
+    }
+
+    private void addInsertColumn(List<String> availableColumns,
+                                 List<String> insertColumns,
+                                 List<String> placeholders,
+                                 List<Object> values,
+                                 String column,
+                                 Object value) {
+        if (availableColumns.contains(column)) {
+            insertColumns.add(column);
+            placeholders.add("?");
+            values.add(value);
+        }
     }
 
     @ExceptionHandler(Exception.class)
