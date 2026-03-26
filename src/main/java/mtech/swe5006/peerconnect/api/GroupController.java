@@ -96,7 +96,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredScheduleStr);
+        group.setPreferredSchedule(preferredSchedule);
         group.setApprovalRequired(approvalRequired);
         group.setCreatedBy(user.getId());
         group.setStatus("active");
@@ -150,7 +150,7 @@ public class GroupController {
         String preferredScheduleStr = asString(body.get("preferredSchedule"));
         LocalDateTime preferredSchedule = body.containsKey("preferredSchedule")
             ? parseDateTime(preferredScheduleStr)
-            : parseDateTime(group.getPreferredSchedule());
+            : group.getPreferredSchedule();
         if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
         }
@@ -175,7 +175,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredScheduleStr != null ? preferredScheduleStr : group.getPreferredSchedule());
+        group.setPreferredSchedule(body.containsKey("preferredSchedule") ? preferredSchedule : group.getPreferredSchedule());
         group.setMaxMembers(maxMembers);
         group.setApprovalRequired(approvalRequired);
         refreshGroupStatus(group);
