@@ -60,6 +60,7 @@ public class StudyGroup {
     @PrePersist
     void prePersist() {
         if (this.id == null) this.id = UUID.randomUUID();
+        if (this.courseId == null) this.courseId = UUID.randomUUID();
         if (this.status == null) this.status = "active";
         if (this.approvalRequired == null) this.approvalRequired = Boolean.FALSE;
         if (this.createdAt == null) this.createdAt = LocalDateTime.now();

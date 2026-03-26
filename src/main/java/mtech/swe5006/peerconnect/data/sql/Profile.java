@@ -11,6 +11,11 @@ public class Profile {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @PrePersist
+    void prePersist() {
+        if (this.fullTimeInd == null) this.fullTimeInd = "N";
+    }
+
     @Column(name = "faculty", length = 100)
     private String faculty;
 
@@ -26,7 +31,7 @@ public class Profile {
     @Column(name = "avatar_url", length = 2048)
     private String avatarUrl;
 
-    @Transient
+    @Column(name = "full_time_ind", length = 1)
     private String fullTimeInd;
 
     // ===== Getters / Setters =====
