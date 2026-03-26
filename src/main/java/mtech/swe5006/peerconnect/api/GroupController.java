@@ -96,7 +96,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredSchedule);
+        group.setPreferredSchedule(preferredScheduleStr);
         group.setApprovalRequired(approvalRequired);
         group.setCreatedBy(user.getId());
         group.setStatus("active");
@@ -148,11 +148,12 @@ public class GroupController {
         String location = body.containsKey("location") ? asString(body.get("location")) : group.getLocation();
         String meetingLink = body.containsKey("meetingLink") ? asString(body.get("meetingLink")) : group.getMeetingLink();
         String preferredScheduleStr = asString(body.get("preferredSchedule"));
-        LocalDateTime preferredSchedule = preferredScheduleStr != null && !preferredScheduleStr.isBlank() ? parseDateTime(preferredScheduleStr) : group.getPreferredSchedule();
+        String preferredScheduleValue = (preferredScheduleStr != null && !preferredScheduleStr.isBlank())
+            ? preferredScheduleStr : group.getPreferredSchedule();
+        LocalDateTime preferredSchedule = parseDateTime(preferredScheduleValue);
         if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
         }
-        if (preferredScheduleStr == null || preferredScheduleStr.isBlank()) preferredSchedule = group.getPreferredSchedule();
         Short maxMembers = body.containsKey("maxMembers") ? asShort(body.get("maxMembers"), group.getMaxMembers()) : group.getMaxMembers();
         boolean approvalRequired = body.containsKey("approvalRequired")
             ? asBoolean(body.get("approvalRequired"), false)
@@ -174,7 +175,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredSchedule);
+        group.setPreferredSchedule(preferredScheduleValue);
         group.setMaxMembers(maxMembers);
         group.setApprovalRequired(approvalRequired);
         refreshGroupStatus(group);

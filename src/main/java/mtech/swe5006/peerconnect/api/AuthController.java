@@ -186,7 +186,12 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     }
 
     String code = generateAndStoreVerificationCode(user);
-    emailService.sendResetCode(user.getEmail(), code);
+    try {
+      emailService.sendResetCode(user.getEmail(), code);
+    } catch (Exception e) {
+      log.error("[ForgotPassword] Failed to send reset code to {}: {}", user.getEmail(), e.getMessage());
+      return ResponseEntity.status(500).body(Map.of("error", "Failed to send verification email. Please try again later."));
+    }
 
     return ResponseEntity.ok(Map.of("message", "If the account exists, a code has been sent."));
   }
@@ -229,7 +234,12 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     }
 
     String code = generateAndStoreVerificationCode(user);
-    emailService.sendChangePasswordCode(user.getEmail(), code);
+    try {
+      emailService.sendChangePasswordCode(user.getEmail(), code);
+    } catch (Exception e) {
+      log.error("[ChangePasswordRequest] Failed to send code to {}: {}", user.getEmail(), e.getMessage());
+      return ResponseEntity.status(500).body(Map.of("error", "Failed to send verification email. Please try again later."));
+    }
 
     return ResponseEntity.ok(Map.of("message", "Verification code sent to your email."));
   }
