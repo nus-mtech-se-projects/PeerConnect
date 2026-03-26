@@ -100,7 +100,17 @@ public class ProfileController {
             profile.setFullTimeInd(Boolean.TRUE.equals(ft) ? "Y" : "N");
         }
 
-        profileRepository.save(profile);
+        try {
+            profileRepository.save(profile);
+        } catch (RuntimeException ex) {
+            if (!body.containsKey("fullTime")) {
+                throw ex;
+            }
+
+            // Shared Azure environments may still have an older profile schema.
+            profile.setFullTimeInd(null);
+            profileRepository.save(profile);
+        }
 
         return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
     }

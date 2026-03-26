@@ -24,7 +24,7 @@ public class StudyGroup {
     @Column(name = "module_code", length = 50)
     private String moduleCode;
 
-    @Column(name = "course_id")
+    @Transient
     private UUID courseId;
 
     @Column(name = "description", length = 2000)
@@ -33,8 +33,8 @@ public class StudyGroup {
     @Column(name = "meeting_link", length = 500)
     private String meetingLink;
 
-    @Column(name = "preferred_schedule", columnDefinition = "DATETIME2")
-    private LocalDateTime preferredSchedule;
+    @Column(name = "preferred_schedule", length = 50)
+    private String preferredSchedule;
 
     @Column(name = "study_mode", length = 20)
     private String studyMode;
@@ -51,7 +51,7 @@ public class StudyGroup {
     @Column(name = "status", length = 20)
     private String status;
 
-    @Column(name = "approval_required")
+    @Transient
     private Boolean approvalRequired;
 
     @Column(name = "created_at", columnDefinition = "DATETIME2")
@@ -88,8 +88,8 @@ public class StudyGroup {
     public String getMeetingLink() { return meetingLink; }
     public void setMeetingLink(String meetingLink) { this.meetingLink = meetingLink; }
 
-    public LocalDateTime getPreferredSchedule() { return preferredSchedule; }
-    public void setPreferredSchedule(LocalDateTime preferredSchedule) { this.preferredSchedule = preferredSchedule; }
+    public String getPreferredSchedule() { return preferredSchedule; }
+    public void setPreferredSchedule(String preferredSchedule) { this.preferredSchedule = preferredSchedule; }
 
     public String getStudyMode() { return studyMode; }
     public void setStudyMode(String studyMode) { this.studyMode = studyMode; }
