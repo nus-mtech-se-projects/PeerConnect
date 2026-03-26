@@ -7,16 +7,13 @@ import java.util.UUID;
 @Entity
 @Table(name = "study_groups", indexes = {
     @Index(name = "IX_study_groups_discovery",
-           columnList = "course_id, status, study_mode, created_at")
+           columnList = "status, study_mode, created_at")
 })
 public class StudyGroup {
 
     @Id
     @Column(name = "id", nullable = false)
     private UUID id;
-
-    @Column(name = "course_id")
-    private UUID courseId;
 
     @Column(name = "topic", length = 200)
     private String topic;
@@ -26,6 +23,9 @@ public class StudyGroup {
 
     @Column(name = "module_code", length = 50)
     private String moduleCode;
+
+    @Column(name = "course_id")
+    private UUID courseId;
 
     @Column(name = "description", length = 2000)
     private String description;
@@ -70,9 +70,6 @@ public class StudyGroup {
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
-    public UUID getCourseId() { return courseId; }
-    public void setCourseId(UUID courseId) { this.courseId = courseId; }
-
     public String getTopic() { return topic; }
     public void setTopic(String topic) { this.topic = topic; }
 
@@ -81,6 +78,9 @@ public class StudyGroup {
 
     public String getModuleCode() { return moduleCode; }
     public void setModuleCode(String moduleCode) { this.moduleCode = moduleCode; }
+
+    public UUID getCourseId() { return courseId; }
+    public void setCourseId(UUID courseId) { this.courseId = courseId; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
