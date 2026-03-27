@@ -86,6 +86,7 @@ public class ProfileController {
         if (profile == null) {
             profile = new Profile();
             profile.setUserId(user.getId());
+            profile.setFullTimeInd("N");
         }
 
         if (body.containsKey("faculty")) profile.setFaculty((String) body.get("faculty"));

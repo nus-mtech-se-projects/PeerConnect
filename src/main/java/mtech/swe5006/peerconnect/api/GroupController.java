@@ -67,7 +67,6 @@ public class GroupController {
 
         String name = asString(body.get("name"));
         String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")));
-        UUID courseId = resolveCourseId(body);
         String description = asString(body.get("description"));
         String topic = firstNonBlank(asString(body.get("topic")), moduleCode);
         String studyMode = firstNonBlank(asString(body.get("studyMode")), "online").toLowerCase();
@@ -82,7 +81,7 @@ public class GroupController {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
         }
 
-        String validationError = validateGroupInput(name, moduleCode, courseId, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
+        String validationError = validateGroupInput(name, moduleCode, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
         if (validationError != null) {
             return ResponseEntity.badRequest().body(Map.of("error", validationError));
         }
@@ -90,7 +89,6 @@ public class GroupController {
         StudyGroup group = new StudyGroup();
         group.setName(name);
         group.setModuleCode(moduleCode);
-        group.setCourseId(courseId);
         group.setDescription(description);
         group.setTopic(topic);
         group.setStudyMode(studyMode);
@@ -143,9 +141,6 @@ public class GroupController {
 
         String name = firstNonBlank(asString(body.get("name")), group.getName());
         String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")), group.getModuleCode());
-        UUID courseId = body.containsKey("courseId") || body.containsKey("courseCode")
-            ? resolveCourseId(body)
-            : group.getCourseId();
         String description = firstNonBlank(asString(body.get("description")), group.getDescription());
         String topic = firstNonBlank(asString(body.get("topic")), group.getTopic());
         String studyMode = firstNonBlank(asString(body.get("studyMode")), group.getStudyMode()).toLowerCase();
@@ -163,7 +158,7 @@ public class GroupController {
             ? asBoolean(body.get("approvalRequired"), false)
             : Boolean.TRUE.equals(group.getApprovalRequired());
 
-        String validationError = validateGroupInput(name, moduleCode, courseId, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
+        String validationError = validateGroupInput(name, moduleCode, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
         if (validationError != null) return ResponseEntity.badRequest().body(Map.of("error", validationError));
 
         long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), "approved");
@@ -173,7 +168,6 @@ public class GroupController {
 
         group.setName(name);
         group.setModuleCode(moduleCode);
-        group.setCourseId(courseId);
         group.setDescription(description);
         group.setTopic(topic);
         group.setStudyMode(studyMode);
@@ -689,7 +683,6 @@ public class GroupController {
 
     private String validateGroupInput(String name,
                                       String moduleCode,
-                                      UUID courseId,
                                       String description,
                                       String studyMode,
                                       String location,
@@ -840,25 +833,6 @@ public class GroupController {
             if (c != null && !c.isBlank()) return c;
         }
         return null;
-    }
-
-    private UUID firstValidUuid(String... candidates) {
-        for (String candidate : candidates) {
-            UUID parsed = parseUuid(candidate);
-            if (parsed != null) return parsed;
-        }
-        return null;
-    }
-
-    private UUID firstNonNull(UUID... candidates) {
-        for (UUID candidate : candidates) {
-            if (candidate != null) return candidate;
-        }
-        return null;
-    }
-
-    private UUID resolveCourseId(Map<String, Object> body) {
-        return firstValidUuid(asString(body.get("courseId")), asString(body.get("courseCode")));
     }
 
     private void saveStudyGroupFallback(StudyGroup group, LocalDateTime preferredSchedule) {
