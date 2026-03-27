@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -68,7 +67,7 @@ public class GroupController {
 
         String name = asString(body.get("name"));
         String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")));
-        UUID courseId = resolveCourseId(body, moduleCode);
+        UUID courseId = resolveCourseId(body);
         String description = asString(body.get("description"));
         String topic = firstNonBlank(asString(body.get("topic")), moduleCode);
         String studyMode = firstNonBlank(asString(body.get("studyMode")), "online").toLowerCase();
@@ -145,7 +144,7 @@ public class GroupController {
         String name = firstNonBlank(asString(body.get("name")), group.getName());
         String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")), group.getModuleCode());
         UUID courseId = body.containsKey("courseId") || body.containsKey("courseCode")
-            ? resolveCourseId(body, moduleCode)
+            ? resolveCourseId(body)
             : group.getCourseId();
         String description = firstNonBlank(asString(body.get("description")), group.getDescription());
         String topic = firstNonBlank(asString(body.get("topic")), group.getTopic());
@@ -858,11 +857,8 @@ public class GroupController {
         return null;
     }
 
-    private UUID resolveCourseId(Map<String, Object> body, String moduleCode) {
-        UUID explicitCourseId = firstValidUuid(asString(body.get("courseId")), asString(body.get("courseCode")));
-        if (explicitCourseId != null) return explicitCourseId;
-        if (moduleCode == null || moduleCode.isBlank()) return null;
-        return UUID.nameUUIDFromBytes(("course:" + moduleCode.trim().toUpperCase()).getBytes(StandardCharsets.UTF_8));
+    private UUID resolveCourseId(Map<String, Object> body) {
+        return firstValidUuid(asString(body.get("courseId")), asString(body.get("courseCode")));
     }
 
     private void saveStudyGroupFallback(StudyGroup group, LocalDateTime preferredSchedule) {

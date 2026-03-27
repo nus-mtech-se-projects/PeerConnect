@@ -671,6 +671,9 @@
                   "});",
                   "pm.test(\"Returns success message\", () => {",
                   "  pm.expect(pm.response.json().message).to.eql(\"Profile updated successfully\");",
+                  "});",
+                  "pm.test(\"Does not return backend error\", () => {",
+                  "  pm.expect(pm.response.text()).to.not.include(\"Internal server error\");",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -686,7 +689,7 @@
             "header": [],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"UpdatedFirst\",\n  \"lastName\": \"UpdatedLast\",\n  \"faculty\": \"Computing\",\n  \"major\": \"Computer Science\",\n  \"yearOfStudy\": 2,\n  \"bio\": \"UAT test bio\",\n  \"fullTime\": true\n}",
+              "raw": "{\n  \"firstName\": \"UpdatedFirst\",\n  \"lastName\": \"UpdatedLast\",\n  \"faculty\": \"Computing\",\n  \"major\": \"Computer Science\",\n  \"yearOfStudy\": 2,\n  \"bio\": \"UAT test bio\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -798,7 +801,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"{{runGroupName}}\",\n  \"moduleCode\": \"CS1010\",\n  \"courseId\": \"e415fc42-3820-f111-832e-000d3a092f19\",\n  \"courseCode\": \"CS1010\",\n  \"topic\": \"{{runGroupTopic}}\",\n  \"description\": \"UAT test group for automated testing\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/uat-test-session\",\n  \"preferredSchedule\": \"{{runGroupSchedule}}\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
+                  "raw": "{\n  \"name\": \"{{runGroupName}}\",\n  \"moduleCode\": \"CS1010\",\n  \"topic\": \"{{runGroupTopic}}\",\n  \"description\": \"UAT test group for automated testing\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/uat-test-session\",\n  \"preferredSchedule\": \"{{runGroupSchedule}}\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
                   "options": { "raw": { "language": "json" } }
                 },
                 "url": {
@@ -1840,7 +1843,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"{{runDissolveGroupName}}\",\n  \"moduleCode\": \"CS9999\",\n  \"courseId\": \"e415fc42-3820-f111-832e-000d3a092f19\",\n  \"courseCode\": \"CS9999\",\n  \"topic\": \"Dissolve Flow Validation\",\n  \"description\": \"This group will be dissolved during UAT\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/dissolve-test\",\n  \"preferredSchedule\": \"2026-12-01T10:00:00\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
+                  "raw": "{\n  \"name\": \"{{runDissolveGroupName}}\",\n  \"moduleCode\": \"CS9999\",\n  \"topic\": \"Dissolve Flow Validation\",\n  \"description\": \"This group will be dissolved during UAT\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/dissolve-test\",\n  \"preferredSchedule\": \"2026-12-01T10:00:00\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
                   "options": { "raw": { "language": "json" } }
                 },
                 "url": {
@@ -2093,7 +2096,9 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "pm.environment.set(\"tutoringModuleCode\", \"CS\" + Date.now().toString().slice(-4));"
+                  "const now = Date.now();",
+                  "pm.environment.set(\"tutoringModuleCode\", \"CS\" + now.toString().slice(-4));",
+                  "pm.environment.set(\"tutoringClassTitle\", \"UAT Tutoring Class \" + now);"
                 ],
                 "type": "text/javascript"
               }
@@ -2114,6 +2119,10 @@
                       "pm.test(\"Returns correct moduleCode\", () => {",
                       "  if (pm.response.code !== 200) return;",
                       "  pm.expect(pm.response.json().moduleCode).to.eql(pm.environment.get(\"tutoringModuleCode\"));",
+                      "});",
+                      "pm.test(\"Returns correct title\", () => {",
+                      "  if (pm.response.code !== 200) return;",
+                      "  pm.expect(pm.response.json().title).to.eql(pm.environment.get(\"tutoringClassTitle\"));",
                       "});",
                       "pm.test(\"isTutor is true for creator\", () => {",
                       "  if (pm.response.code !== 200) return;",
@@ -2142,7 +2151,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Algorithms Help Session\",\n  \"moduleCode\": \"{{tutoringModuleCode}}\",\n  \"topic\": \"Graph Algorithms\",\n  \"description\": \"Covering BFS, DFS, Dijkstra\",\n  \"schedule\": \"Friday 6pm\",\n  \"mode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/test-tutoring\",\n  \"maxStudents\": 5\n}"
+              "raw": "{\n  \"title\": \"{{tutoringClassTitle}}\",\n  \"moduleCode\": \"{{tutoringModuleCode}}\",\n  \"topic\": \"Graph Algorithms\",\n  \"description\": \"Covering BFS, DFS, Dijkstra\",\n  \"schedule\": \"Friday 6pm\",\n  \"mode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/test-tutoring\",\n  \"maxStudents\": 5\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes",

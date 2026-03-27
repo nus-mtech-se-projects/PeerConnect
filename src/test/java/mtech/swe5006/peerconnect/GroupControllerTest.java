@@ -267,6 +267,25 @@ class GroupControllerTest {
         }
 
         @Test
+        void updateWithNoExplicitCourseIdKeepsCourseIdNull() {
+            group.setCourseId(null);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("name", "Updated Name");
+            body.put("moduleCode", "CS9000");
+            body.put("description", "Updated desc");
+            body.put("preferredSchedule", "2026-05-01T10:00:00");
+            body.put("meetingLink", "https://zoom.us/updated");
+
+            ResponseEntity<?> res = controller.updateGroup(groupId, authFor(alice), body);
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            ArgumentCaptor<StudyGroup> groupCaptor = ArgumentCaptor.forClass(StudyGroup.class);
+            verify(groupRepository, atLeastOnce()).save(groupCaptor.capture());
+            assertThat(groupCaptor.getValue().getCourseId()).isNull();
+        }
+
+        @Test
         void nonAdminCannotUpdateGroup() {
             when(memberRepository.findByGroupIdAndUserId(groupId, bob.getId())).thenReturn(Optional.empty());
             ResponseEntity<?> res = controller.updateGroup(groupId, authFor(bob), new HashMap<>());
