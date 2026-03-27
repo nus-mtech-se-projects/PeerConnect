@@ -3,7 +3,6 @@ package mtech.swe5006.peerconnect.data.sql;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
-import mtech.swe5006.peerconnect.data.sql.UserRepository;
 @Entity
 @Table(name = "users")
 public class User {

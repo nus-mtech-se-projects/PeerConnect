@@ -18,13 +18,11 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/groups")
@@ -846,13 +844,6 @@ public class GroupController {
         for (String candidate : candidates) {
             UUID parsed = parseUuid(candidate);
             if (parsed != null) return parsed;
-        }
-        return null;
-    }
-
-    private UUID firstNonNull(UUID... candidates) {
-        for (UUID candidate : candidates) {
-            if (candidate != null) return candidate;
         }
         return null;
     }

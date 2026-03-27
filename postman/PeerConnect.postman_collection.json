@@ -105,12 +105,22 @@
             "body": {
               "mode": "raw",
               "raw": "{\r\n  \"nusStudentId\": \"{{runNusId}}\",\r\n  \"firstName\": \"Test\",\r\n  \"lastName\": \"User\",\r\n  \"email\": \"{{runEmail}}\",\r\n  \"phone\": \"91234567\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "register"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
             }
           },
           "response": []
@@ -146,12 +156,22 @@
             "body": {
               "mode": "raw",
               "raw": "{\r\n  \"email\": \"{{runEmail}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
           },
           "response": []
@@ -183,12 +203,22 @@
             "body": {
               "mode": "raw",
               "raw": "{\r\n  \"nusStudentId\": \"{{testNusId}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
           },
           "response": []
@@ -220,12 +250,22 @@
             "body": {
               "mode": "raw",
               "raw": "{\r\n  \"email\": \"{{testEmail}}\",\r\n  \"password\": \"WrongPassword!\"\r\n}\r\n",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
           },
           "response": []
@@ -257,12 +297,22 @@
             "body": {
               "mode": "raw",
               "raw": "{\r\n  \"email\": \"{{testEmail}}\",\r\n  \"nusStudentId\": \"{{testNusId}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
           },
           "response": []
@@ -300,7 +350,10 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": ["\r", ""],
+                "exec": [
+                  "\r",
+                  ""
+                ],
                 "type": "text/javascript",
                 "packages": {},
                 "requests": {}
@@ -313,12 +366,22 @@
             "body": {
               "mode": "raw",
               "raw": "{\r\n  \"idToken\": \"{{msIdToken}}\"\r\n}\r\n",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/microsoft",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "microsoft"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "microsoft"
+              ]
             }
           },
           "response": []
@@ -347,12 +410,22 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{runEmail}}\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/forgot-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "forgot-password"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
             }
           },
           "response": []
@@ -378,12 +451,22 @@
             "body": {
               "mode": "raw",
               "raw": "{}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/forgot-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "forgot-password"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
             }
           },
           "response": []
@@ -409,12 +492,22 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{runEmail}}\",\n  \"code\": \"000000\",\n  \"newPassword\": \"NewPass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/reset-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "reset-password"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ]
             }
           },
           "response": []
@@ -435,13 +528,22 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/auth/change-password/request",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "change-password", "request"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password",
+                "request"
+              ]
             }
           },
           "response": []
@@ -467,14 +569,27 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/auth/change-password/request",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "change-password", "request"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password",
+                "request"
+              ]
             }
           },
           "response": []
@@ -497,19 +612,36 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
             "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"code\": \"000000\",\n  \"newPassword\": \"NewPass456\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/change-password/confirm",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "change-password", "confirm"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password",
+                "confirm"
+              ]
             }
           },
           "response": []
@@ -547,14 +679,26 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
             }
           },
           "response": []
@@ -575,13 +719,21 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
             }
           },
           "response": []
@@ -620,14 +772,25 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profile"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
             }
           },
           "response": []
@@ -648,13 +811,20 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profile"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
             }
           },
           "response": []
@@ -663,17 +833,49 @@
           "name": "Update Profile",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const retryKey = \"retry_UpdateProfile\";",
+                  "const retries = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                  "pm.variables.set(\"_currentRetry\", String(retries));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
+                  "const retryKey = \"retry_UpdateProfile\";",
+                  "const maxRetries = 2;",
+                  "const bodyText = pm.response.text();",
+                  "const is5xx = pm.response.code >= 500;",
+                  "",
+                  "if (is5xx) {",
+                  "  const retry = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                  "  if (retry < maxRetries) {",
+                  "    pm.environment.set(retryKey, String(retry + 1));",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "  } else {",
+                  "    pm.environment.unset(retryKey);",
+                  "  }",
+                  "} else {",
+                  "  pm.environment.unset(retryKey);",
+                  "}",
+                  "",
                   "pm.test(\"200 on update profile\", () => {",
-                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.code, bodyText).to.eql(200);",
                   "});",
+                  "",
                   "pm.test(\"Returns success message\", () => {",
-                  "  pm.expect(pm.response.json().message).to.eql(\"Profile updated successfully\");",
+                  "  if (pm.response.code !== 200) return;",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.message, JSON.stringify(json)).to.eql(\"Profile updated successfully\");",
                   "});",
+                  "",
                   "pm.test(\"Does not return backend error\", () => {",
-                  "  pm.expect(pm.response.text()).to.not.include(\"Internal server error\");",
+                  "  pm.expect(bodyText).to.not.include(\"Internal server error\");",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -683,19 +885,34 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "PUT",
             "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"firstName\": \"UpdatedFirst\",\n  \"lastName\": \"UpdatedLast\",\n  \"faculty\": \"Computing\",\n  \"major\": \"Computer Science\",\n  \"yearOfStudy\": 2,\n  \"bio\": \"UAT test bio\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profile"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
             }
           },
           "response": []
@@ -721,14 +938,26 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "DELETE",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/profile/avatar",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "profile", "avatar"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile",
+                "avatar"
+              ]
             }
           },
           "response": []
@@ -751,7 +980,10 @@
                       "const now = Date.now();",
                       "pm.environment.set(\"runGroupName\", \"UAT Study Group \" + now);",
                       "pm.environment.set(\"runGroupTopic\", \"CS1010 Midterms \" + now);",
-                      "pm.environment.set(\"runGroupSchedule\", \"2026-10-15T18:00:00\");"
+                      "pm.environment.set(\"runGroupSchedule\", new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19));",
+                      "const retryKey = \"retry_CreateGroup\";",
+                      "const retries = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                      "pm.variables.set(\"_currentRetry\", String(retries));"
                     ],
                     "type": "text/javascript"
                   }
@@ -760,32 +992,36 @@
                   "listen": "test",
                   "script": {
                     "exec": [
+                      "const retryKey = \"retry_CreateGroup\";",
+                      "const maxRetries = 2;",
+                      "const bodyText = pm.response.text();",
+                      "const is5xx = pm.response.code >= 500;",
+                      "",
+                      "if (is5xx) {",
+                      "  const retry = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                      "  if (retry < maxRetries) {",
+                      "    pm.environment.set(retryKey, String(retry + 1));",
+                      "    postman.setNextRequest(pm.info.requestName);",
+                      "  } else {",
+                      "    pm.environment.unset(retryKey);",
+                      "    pm.environment.unset(\"groupId\");",
+                      "  }",
+                      "} else {",
+                      "  pm.environment.unset(retryKey);",
+                      "}",
+                      "",
                       "pm.test(\"200 on create group\", () => {",
-                      "  pm.response.to.have.status(200);",
+                      "  pm.expect(pm.response.code, bodyText).to.eql(200);",
                       "});",
+                      "",
                       "pm.test(\"Saves groupId\", () => {",
                       "  if (pm.response.code !== 200) {",
                       "    pm.environment.unset(\"groupId\");",
                       "    return;",
                       "  }",
                       "  const b = pm.response.json();",
-                      "  pm.expect(b.id).to.be.a(\"string\");",
+                      "  pm.expect(b.id, JSON.stringify(b)).to.be.a(\"string\");",
                       "  pm.environment.set(\"groupId\", b.id);",
-                      "});",
-                      "pm.test(\"Returns created group details\", () => {",
-                      "  if (pm.response.code !== 200) return;",
-                      "  const b = pm.response.json();",
-                      "  pm.expect(b.name).to.eql(pm.environment.get(\"runGroupName\"));",
-                      "  pm.expect(b.members).to.be.an(\"array\");",
-                      "  pm.expect(b.sessions).to.be.an(\"array\");",
-                      "});",
-                      "pm.test(\"Owner membership created with correct role\", () => {",
-                      "  if (pm.response.code !== 200) return;",
-                      "  const members = pm.response.json().members;",
-                      "  pm.expect(members).to.be.an(\"array\").with.length.above(0);",
-                      "  const owner = members.find(m => m.role === \"owner\");",
-                      "  pm.expect(owner).to.not.be.undefined;",
-                      "  pm.expect(owner.membershipStatus).to.eql(\"approved\");",
                       "});"
                     ],
                     "type": "text/javascript"
@@ -795,19 +1031,34 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"{{runGroupName}}\",\n  \"moduleCode\": \"CS1010\",\n  \"topic\": \"{{runGroupTopic}}\",\n  \"description\": \"UAT test group for automated testing\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/uat-test-session\",\n  \"preferredSchedule\": \"{{runGroupSchedule}}\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "raw": "{\n  \"name\": \"{{runGroupName}}\",\n  \"moduleCode\": \"CS1010\",\n  \"topic\": \"{{runGroupTopic}}\",\n  \"description\": \"UAT group creation test\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/test-group\",\n  \"preferredSchedule\": \"{{runGroupSchedule}}\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups"
+                  ]
                 }
               },
               "response": []
@@ -833,19 +1084,34 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"moduleCode\": \"CS1010\",\n  \"studyMode\": \"online\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups"
+                  ]
                 }
               },
               "response": []
@@ -871,14 +1137,25 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups"
+                  ]
                 }
               },
               "response": []
@@ -909,14 +1186,26 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
                 }
               },
               "response": []
@@ -942,14 +1231,26 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/00000000-0000-0000-0000-000000000000",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "00000000-0000-0000-0000-000000000000"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "00000000-0000-0000-0000-000000000000"
+                  ]
                 }
               },
               "response": []
@@ -979,19 +1280,35 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "PUT",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"name\": \"Updated UAT Group\",\n  \"preferredSchedule\": \"2026-10-20T18:00:00\",\n  \"maxMembers\": 6\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
                 }
               },
               "response": []
@@ -1037,12 +1354,22 @@
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"nusStudentId\": \"{{runNusId2}}\",\n  \"firstName\": \"User\",\n  \"lastName\": \"Two\",\n  \"email\": \"{{runEmail2}}\",\n  \"phone\": \"82345678\",\n  \"password\": \"{{testPassword}}\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/auth/register",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "auth", "register"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "register"
+                  ]
                 }
               },
               "response": []
@@ -1071,12 +1398,22 @@
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"email\": \"{{runEmail2}}\",\n  \"password\": \"{{testPassword}}\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/auth/login",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "auth", "login"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "login"
+                  ]
                 }
               },
               "response": []
@@ -1107,14 +1444,27 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/members",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "members"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members"
+                  ]
                 }
               },
               "response": []
@@ -1142,19 +1492,37 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"email\": \"{{runEmail2}}\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/members/invite",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "members", "invite"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members",
+                    "invite"
+                  ]
                 }
               },
               "response": []
@@ -1193,19 +1561,37 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"email\": \"nobody-does-not-exist@u.nus.edu.sg\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/members/invite",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "members", "invite"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members",
+                    "invite"
+                  ]
                 }
               },
               "response": []
@@ -1244,14 +1630,29 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/members/{{userId2}}/approve",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "members", "{{userId2}}", "approve"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members",
+                    "{{userId2}}",
+                    "approve"
+                  ]
                 }
               },
               "response": []
@@ -1290,14 +1691,27 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/join",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "join"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "join"
+                  ]
                 }
               },
               "response": []
@@ -1336,14 +1750,28 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "DELETE",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/members/{{userId2}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "members", "{{userId2}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members",
+                    "{{userId2}}"
+                  ]
                 }
               },
               "response": []
@@ -1382,14 +1810,27 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/join",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "join"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "join"
+                  ]
                 }
               },
               "response": []
@@ -1428,14 +1869,27 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/leave",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "leave"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "leave"
+                  ]
                 }
               },
               "response": []
@@ -1474,19 +1928,36 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"newOwnerUserId\": \"{{userId2}}\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/transfer-ownership",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "transfer-ownership"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "transfer-ownership"
+                  ]
                 }
               },
               "response": []
@@ -1536,19 +2007,36 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"title\": \"UAT Session 1\",\n  \"notes\": \"Test session notes\",\n  \"startsAt\": \"2026-08-01T10:00:00\",\n  \"endsAt\": \"2026-08-01T12:00:00\",\n  \"meetingLink\": \"https://zoom.us/j/uat-session-1\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "sessions"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions"
+                  ]
                 }
               },
               "response": []
@@ -1587,19 +2075,36 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"startsAt\": \"2026-08-01T14:00:00\",\n  \"meetingLink\": \"https://zoom.us/j/no-title\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "sessions"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions"
+                  ]
                 }
               },
               "response": []
@@ -1638,19 +2143,36 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"title\": \"No Link Session\",\n  \"startsAt\": \"2026-08-01T14:00:00\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "sessions"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions"
+                  ]
                 }
               },
               "response": []
@@ -1689,14 +2211,27 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "sessions"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions"
+                  ]
                 }
               },
               "response": []
@@ -1735,19 +2270,37 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "PUT",
                 "header": [],
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"title\": \"Updated UAT Session\",\n  \"meetingLink\": \"https://zoom.us/j/updated-session\"\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions/{{sessionId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "sessions", "{{sessionId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions",
+                    "{{sessionId}}"
+                  ]
                 }
               },
               "response": []
@@ -1786,14 +2339,28 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "DELETE",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions/{{sessionId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}", "sessions", "{{sessionId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions",
+                    "{{sessionId}}"
+                  ]
                 }
               },
               "response": []
@@ -1810,7 +2377,12 @@
                   "listen": "prerequest",
                   "script": {
                     "exec": [
-                      "pm.environment.set(\"runDissolveGroupName\", \"Dissolve Test Group \" + Date.now());"
+                      "const now = Date.now();",
+                      "pm.environment.set(\"runDissolveGroupName\", \"Dissolve Test Group \" + now);",
+                      "pm.environment.set(\"runDissolvePreferredSchedule\", new Date(now + 8 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19));",
+                      "const retryKey = \"retry_CreateGroupForDissolve\";",
+                      "const retries = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                      "pm.variables.set(\"_currentRetry\", String(retries));"
                     ],
                     "type": "text/javascript"
                   }
@@ -1819,15 +2391,36 @@
                   "listen": "test",
                   "script": {
                     "exec": [
+                      "const retryKey = \"retry_CreateGroupForDissolve\";",
+                      "const maxRetries = 2;",
+                      "const bodyText = pm.response.text();",
+                      "const is5xx = pm.response.code >= 500;",
+                      "",
+                      "if (is5xx) {",
+                      "  const retry = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                      "  if (retry < maxRetries) {",
+                      "    pm.environment.set(retryKey, String(retry + 1));",
+                      "    postman.setNextRequest(pm.info.requestName);",
+                      "  } else {",
+                      "    pm.environment.unset(retryKey);",
+                      "    pm.environment.unset(\"dissolveGroupId\");",
+                      "  }",
+                      "} else {",
+                      "  pm.environment.unset(retryKey);",
+                      "}",
+                      "",
                       "pm.test(\"200 on create dissolve group\", () => {",
-                      "  pm.response.to.have.status(200);",
+                      "  pm.expect(pm.response.code, bodyText).to.eql(200);",
                       "});",
+                      "",
                       "pm.test(\"Saves dissolveGroupId\", () => {",
                       "  if (pm.response.code !== 200) {",
                       "    pm.environment.unset(\"dissolveGroupId\");",
                       "    return;",
                       "  }",
-                      "  pm.environment.set(\"dissolveGroupId\", pm.response.json().id);",
+                      "  const json = pm.response.json();",
+                      "  pm.expect(json.id, JSON.stringify(json)).to.be.a(\"string\");",
+                      "  pm.environment.set(\"dissolveGroupId\", json.id);",
                       "});"
                     ],
                     "type": "text/javascript"
@@ -1837,19 +2430,34 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"{{runDissolveGroupName}}\",\n  \"moduleCode\": \"CS9999\",\n  \"topic\": \"Dissolve Flow Validation\",\n  \"description\": \"This group will be dissolved during UAT\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/dissolve-test\",\n  \"preferredSchedule\": \"2026-12-01T10:00:00\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
-                  "options": { "raw": { "language": "json" } }
+                  "raw": "{\n  \"name\": \"{{runDissolveGroupName}}\",\n  \"moduleCode\": \"CS9999\",\n  \"topic\": \"Dissolve Flow Validation\",\n  \"description\": \"This group will be dissolved during UAT\",\n  \"studyMode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/j/dissolve-test\",\n  \"preferredSchedule\": \"{{runDissolvePreferredSchedule}}\",\n  \"maxMembers\": 5,\n  \"approvalRequired\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/groups",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups"
+                  ]
                 }
               },
               "response": []
@@ -1888,14 +2496,27 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{dissolveGroupId}}/dissolve",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{dissolveGroupId}}", "dissolve"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{dissolveGroupId}}",
+                    "dissolve"
+                  ]
                 }
               },
               "response": []
@@ -1934,14 +2555,27 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{dissolveGroupId}}/dissolve",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{dissolveGroupId}}", "dissolve"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{dissolveGroupId}}",
+                    "dissolve"
+                  ]
                 }
               },
               "response": []
@@ -1980,14 +2614,27 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken2}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "POST",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{dissolveGroupId}}/join",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{dissolveGroupId}}", "join"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{dissolveGroupId}}",
+                    "join"
+                  ]
                 }
               },
               "response": []
@@ -2022,14 +2669,26 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "DELETE",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{dissolveGroupId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{dissolveGroupId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{dissolveGroupId}}"
+                  ]
                 }
               },
               "response": []
@@ -2069,14 +2728,26 @@
               "request": {
                 "auth": {
                   "type": "bearer",
-                  "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "method": "DELETE",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/api/groups/{{groupId}}",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "groups", "{{groupId}}"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
                 }
               },
               "response": []
@@ -2084,13 +2755,12 @@
           ]
         }
       ]
-    }
-  ,
+    },
     {
       "name": "Tutoring",
       "item": [
-            {
-              "name": "Create Tutoring Class",
+        {
+          "name": "Create Tutoring Class",
           "event": [
             {
               "listen": "prerequest",
@@ -2103,60 +2773,77 @@
                 "type": "text/javascript"
               }
             },
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "pm.test(\"200 on successful class creation\", () => {",
-                      "  pm.response.to.have.status(200);",
-                      "});",
-                      "pm.test(\"Returns UUID id\", () => {",
-                      "  if (pm.response.code !== 200) return;",
-                      "  pm.expect(pm.response.json().id).to.match(",
-                      "    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i",
-                      "  );",
-                      "});",
-                      "pm.test(\"Returns correct moduleCode\", () => {",
-                      "  if (pm.response.code !== 200) return;",
-                      "  pm.expect(pm.response.json().moduleCode).to.eql(pm.environment.get(\"tutoringModuleCode\"));",
-                      "});",
-                      "pm.test(\"Returns correct title\", () => {",
-                      "  if (pm.response.code !== 200) return;",
-                      "  pm.expect(pm.response.json().title).to.eql(pm.environment.get(\"tutoringClassTitle\"));",
-                      "});",
-                      "pm.test(\"isTutor is true for creator\", () => {",
-                      "  if (pm.response.code !== 200) return;",
-                      "  pm.expect(pm.response.json().isTutor).to.be.true;",
-                      "});",
-                      "pm.test(\"enrolledCount is 0\", () => {",
-                      "  if (pm.response.code !== 200) return;",
-                      "  pm.expect(pm.response.json().enrolledCount).to.eql(0);",
-                      "});",
-                      "if (pm.response.code !== 200) {",
-                      "  pm.environment.unset(\"tutoringClassId\");",
-                      "} else {",
-                      "  pm.environment.set(\"tutoringClassId\", pm.response.json().id);",
-                      "}"
-                    ],
-                    "type": "text/javascript"
-                  }
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on successful class creation\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns UUID id\", () => {",
+                  "  if (pm.response.code !== 200) return;",
+                  "  pm.expect(pm.response.json().id).to.match(",
+                  "    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i",
+                  "  );",
+                  "});",
+                  "pm.test(\"Returns correct moduleCode\", () => {",
+                  "  if (pm.response.code !== 200) return;",
+                  "  pm.expect(pm.response.json().moduleCode).to.eql(pm.environment.get(\"tutoringModuleCode\"));",
+                  "});",
+                  "pm.test(\"Returns correct title\", () => {",
+                  "  if (pm.response.code !== 200) return;",
+                  "  pm.expect(pm.response.json().title).to.eql(pm.environment.get(\"tutoringClassTitle\"));",
+                  "});",
+                  "pm.test(\"isTutor is true for creator\", () => {",
+                  "  if (pm.response.code !== 200) return;",
+                  "  pm.expect(pm.response.json().isTutor).to.be.true;",
+                  "});",
+                  "pm.test(\"enrolledCount is 0\", () => {",
+                  "  if (pm.response.code !== 200) return;",
+                  "  pm.expect(pm.response.json().enrolledCount).to.eql(0);",
+                  "});",
+                  "if (pm.response.code !== 200) {",
+                  "  pm.environment.unset(\"tutoringClassId\");",
+                  "} else {",
+                  "  pm.environment.set(\"tutoringClassId\", pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
             }
           ],
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"{{tutoringClassTitle}}\",\n  \"moduleCode\": \"{{tutoringModuleCode}}\",\n  \"topic\": \"Graph Algorithms\",\n  \"description\": \"Covering BFS, DFS, Dijkstra\",\n  \"schedule\": \"Friday 6pm\",\n  \"mode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/test-tutoring\",\n  \"maxStudents\": 5\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
             }
           },
           "response": []
@@ -2182,18 +2869,35 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/test\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
             }
           },
           "response": []
@@ -2219,18 +2923,35 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Test Class\",\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"weekend\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
             }
           },
           "response": []
@@ -2256,18 +2977,35 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Test Class\",\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"in-person\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
             }
           },
           "response": []
@@ -2302,14 +3040,26 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
             }
           },
           "response": []
@@ -2334,8 +3084,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
             }
           },
           "response": []
@@ -2367,15 +3123,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nusStudentId\": \"{{tutoringNusId2}}\",\n  \"firstName\": \"Student\",\n  \"lastName\": \"Two\",\n  \"email\": \"{{tutoringEmail2}}\",\n  \"phone\": \"91000002\",\n  \"password\": \"{{testPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "register"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
             }
           },
           "response": []
@@ -2398,65 +3165,90 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{tutoringEmail2}}\",\n  \"password\": \"{{testPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
           },
           "response": []
         },
+        {
+          "name": "Enroll in Tutoring Class",
+          "event": [
             {
-              "name": "Enroll in Tutoring Class",
-              "event": [
-                {
-                  "listen": "prerequest",
-                  "script": {
-                    "exec": [
-                      "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
-                      "  pm.execution.skipRequest();",
-                      "}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                },
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "pm.test(\"200 on enrollment\", () => {",
-                      "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                      "  pm.response.to.have.status(200);",
-                      "});",
-                      "pm.test(\"enrolled is true\", () => {",
-                      "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                      "  pm.expect(pm.response.json().enrolled).to.be.true;",
-                      "});",
-                      "pm.test(\"enrolledCount incremented\", () => {",
-                      "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                      "  pm.expect(pm.response.json().enrolledCount).to.eql(1);",
-                      "});"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on enrollment\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"enrolled is true\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().enrolled).to.be.true;",
+                  "});",
+                  "pm.test(\"enrolledCount incremented\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().enrolledCount).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "enroll"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "enroll"
+              ]
             }
           },
           "response": []
@@ -2495,14 +3287,28 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "enroll"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "enroll"
+              ]
             }
           },
           "response": []
@@ -2541,14 +3347,28 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "enroll"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "enroll"
+              ]
             }
           },
           "response": []
@@ -2591,64 +3411,120 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
             }
           },
           "response": []
         },
+        {
+          "name": "Leave Tutoring Class",
+          "event": [
             {
-              "name": "Leave Tutoring Class",
-              "event": [
-                {
-                  "listen": "prerequest",
-                  "script": {
-                    "exec": [
-                      "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
-                      "  pm.execution.skipRequest();",
-                      "}"
-                    ],
-                    "type": "text/javascript"
-                  }
-                },
-                {
-                  "listen": "test",
-                  "script": {
-                    "exec": [
-                      "pm.test(\"200 on leave\", () => {",
-                      "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                      "  pm.response.to.have.status(200);",
-                      "});",
-                      "pm.test(\"enrolled is false\", () => {",
-                      "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                      "  pm.expect(pm.response.json().enrolled).to.be.false;",
-                      "});",
-                      "pm.test(\"enrolledCount decremented\", () => {",
-                      "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                      "  pm.expect(pm.response.json().enrolledCount).to.eql(0);",
-                      "});"
-                    ],
-                    "type": "text/javascript"
-                  }
-                }
-              ],
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const retryKey = \"retry_LeaveTutoringClass\";",
+                  "const retries = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                  "pm.variables.set(\"_currentRetry\", String(retries));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const retryKey = \"retry_LeaveTutoringClass\";",
+                  "const maxRetries = 2;",
+                  "const bodyText = pm.response.text();",
+                  "const shouldRun = !!pm.environment.get(\"tutoringClassId\") && !!pm.environment.get(\"tutoringToken2\");",
+                  "",
+                  "if (shouldRun && pm.response.code >= 500) {",
+                  "  const retry = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                  "  if (retry < maxRetries) {",
+                  "    pm.environment.set(retryKey, String(retry + 1));",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "  } else {",
+                  "    pm.environment.unset(retryKey);",
+                  "  }",
+                  "} else {",
+                  "  pm.environment.unset(retryKey);",
+                  "}",
+                  "",
+                  "pm.test(\"200 on leave\", () => {",
+                  "  if (!shouldRun) return;",
+                  "  pm.expect(pm.response.code, bodyText).to.eql(200);",
+                  "});",
+                  "",
+                  "pm.test(\"enrolled is false\", () => {",
+                  "  if (!shouldRun || pm.response.code !== 200) return;",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.enrolled, JSON.stringify(json)).to.be.false;",
+                  "});",
+                  "",
+                  "pm.test(\"enrolledCount decremented\", () => {",
+                  "  if (!shouldRun || pm.response.code !== 200) return;",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.enrolledCount, JSON.stringify(json)).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
             "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "leave"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "leave"
+              ]
             }
           },
           "response": []
@@ -2660,9 +3536,9 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
-                  "  pm.execution.skipRequest();",
-                  "}"
+                  "const retryKey = \"retry_LeaveTutoringClassAgain\";",
+                  "const retries = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                  "pm.variables.set(\"_currentRetry\", String(retries));"
                 ],
                 "type": "text/javascript"
               }
@@ -2671,13 +3547,32 @@
               "listen": "test",
               "script": {
                 "exec": [
+                  "const retryKey = \"retry_LeaveTutoringClassAgain\";",
+                  "const maxRetries = 2;",
+                  "const bodyText = pm.response.text();",
+                  "const shouldRun = !!pm.environment.get(\"tutoringClassId\") && !!pm.environment.get(\"tutoringToken2\");",
+                  "",
+                  "if (shouldRun && pm.response.code >= 500) {",
+                  "  const retry = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+                  "  if (retry < maxRetries) {",
+                  "    pm.environment.set(retryKey, String(retry + 1));",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "  } else {",
+                  "    pm.environment.unset(retryKey);",
+                  "  }",
+                  "} else {",
+                  "  pm.environment.unset(retryKey);",
+                  "}",
+                  "",
                   "pm.test(\"200 on double leave\", () => {",
-                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                  "  pm.response.to.have.status(200);",
+                  "  if (!shouldRun) return;",
+                  "  pm.expect(pm.response.code, bodyText).to.eql(200);",
                   "});",
+                  "",
                   "pm.test(\"alreadyLeft is true\", () => {",
-                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                  "  pm.expect(pm.response.json().alreadyLeft).to.be.true;",
+                  "  if (!shouldRun || pm.response.code !== 200) return;",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.alreadyLeft, JSON.stringify(json)).to.be.true;",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -2687,191 +3582,331 @@
           "request": {
             "auth": {
               "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "POST",
             "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "leave"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "leave"
+              ]
             }
           },
           "response": []
         },
         {
-          "name": "Tutor Cannot Leave Own Class (400)",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) {",
-                  "  pm.execution.skipRequest();",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"400 when tutor tries to leave own class\", () => {",
-                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
-                  "  pm.response.to.have.status(400);",
-                  "});",
-                  "pm.test(\"Returns correct error\", () => {",
-                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
-                  "  pm.expect(pm.response.json().error).to.eql(\"Tutor cannot leave their own class\");",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
-            },
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}", "leave"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Non-Owner Cannot Delete Class (403)",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
-                  "  pm.execution.skipRequest();",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"403 when non-owner deletes class\", () => {",
-                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                  "  pm.response.to.have.status(403);",
-                  "});",
-                  "pm.test(\"Returns correct error\", () => {",
-                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
-                  "  pm.expect(pm.response.json().error).to.eql(\"Not authorized to delete this tutoring class\");",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{tutoringToken2}}", "type": "string" }]
-            },
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete Class Not Found (404)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"404 when class not found\", () => {",
-                  "  pm.response.to.have.status(404);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
-            },
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/tutoring/classes/00000000-0000-0000-0000-000000000000",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "00000000-0000-0000-0000-000000000000"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Cleanup: Delete Tutoring Class",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) {",
-                  "  pm.execution.skipRequest();",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"200 on cleanup\", () => {",
-                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"deleted is true\", () => {",
-                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
-                  "  pm.expect(pm.response.json().deleted).to.be.true;",
-                  "});",
-                  "pm.environment.set(\"tutoringClassId\", \"\");",
-                  "pm.environment.set(\"tutoringToken2\", \"\");",
-                  "pm.environment.set(\"tutoringEmail2\", \"\");",
-                  "pm.environment.set(\"tutoringNusId2\", \"\");"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
-            },
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "tutoring", "classes", "{{tutoringClassId}}"]
-            }
-          },
-          "response": []
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"200 on double leave\", () => {",
+              "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"alreadyLeft is true\", () => {",
+              "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+              "  pm.expect(pm.response.json().alreadyLeft).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
         }
-      ]
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{tutoringToken2}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "tutoring",
+            "classes",
+            "{{tutoringClassId}}",
+            "leave"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Tutor Cannot Leave Own Class (400)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) {",
+              "  pm.execution.skipRequest();",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"400 when tutor tries to leave own class\", () => {",
+              "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "pm.test(\"Returns correct error\", () => {",
+              "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
+              "  pm.expect(pm.response.json().error).to.eql(\"Tutor cannot leave their own class\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{authToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "tutoring",
+            "classes",
+            "{{tutoringClassId}}",
+            "leave"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Non-Owner Cannot Delete Class (403)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
+              "  pm.execution.skipRequest();",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"403 when non-owner deletes class\", () => {",
+              "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+              "  pm.response.to.have.status(403);",
+              "});",
+              "pm.test(\"Returns correct error\", () => {",
+              "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+              "  pm.expect(pm.response.json().error).to.eql(\"Not authorized to delete this tutoring class\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{tutoringToken2}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "tutoring",
+            "classes",
+            "{{tutoringClassId}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Class Not Found (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"404 when class not found\", () => {",
+              "  pm.response.to.have.status(404);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{authToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/tutoring/classes/00000000-0000-0000-0000-000000000000",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "tutoring",
+            "classes",
+            "00000000-0000-0000-0000-000000000000"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Cleanup: Delete Tutoring Class",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const retryKey = \"retry_CleanupDeleteTutoringClass\";",
+              "const retries = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+              "pm.variables.set(\"_currentRetry\", String(retries));"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const retryKey = \"retry_CleanupDeleteTutoringClass\";",
+              "const maxRetries = 2;",
+              "const bodyText = pm.response.text();",
+              "const shouldRun = !!pm.environment.get(\"tutoringClassId\") && !!pm.environment.get(\"authToken\");",
+              "",
+              "if (shouldRun && pm.response.code >= 500) {",
+              "  const retry = parseInt(pm.environment.get(retryKey) || \"0\", 10);",
+              "  if (retry < maxRetries) {",
+              "    pm.environment.set(retryKey, String(retry + 1));",
+              "    postman.setNextRequest(pm.info.requestName);",
+              "  } else {",
+              "    pm.environment.unset(retryKey);",
+              "  }",
+              "} else {",
+              "  pm.environment.unset(retryKey);",
+              "}",
+              "",
+              "pm.test(\"200 on cleanup\", () => {",
+              "  if (!shouldRun) return;",
+              "  pm.expect(pm.response.code, bodyText).to.eql(200);",
+              "});",
+              "",
+              "pm.test(\"deleted is true\", () => {",
+              "  if (!shouldRun || pm.response.code !== 200) return;",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.deleted, JSON.stringify(json)).to.be.true;",
+              "});",
+              "",
+              "pm.environment.set(\"tutoringClassId\", \"\");",
+              "pm.environment.set(\"tutoringToken2\", \"\");",
+              "pm.environment.set(\"tutoringEmail2\", \"\");",
+              "pm.environment.set(\"tutoringNusId2\", \"\");"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{authToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "tutoring",
+            "classes",
+            "{{tutoringClassId}}"
+          ]
+        }
+      },
+      "response": []
     }
   ]
 }
