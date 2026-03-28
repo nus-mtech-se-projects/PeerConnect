@@ -1,1 +1,5 @@
-services: {}
+services:
+  zipkin:
+    image: openzipkin/zipkin:3
+    ports:
+      - "9411:9411"

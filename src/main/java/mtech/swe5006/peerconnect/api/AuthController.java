@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.SecureRandom;
+import java.text.ParseException;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -149,6 +150,9 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
             "expiresInSeconds", jwtService.expiresInSeconds()
         ));
 
+    } catch (ParseException e) {
+        log.error("[MicrosoftLogin] Failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+        return ResponseEntity.badRequest().body(Map.of("error", "Invalid ID token: " + e.getMessage()));
     } catch (Exception e) {
         log.error("[MicrosoftLogin] Failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
         return ResponseEntity.status(400).body(Map.of("error", "Microsoft login failed. Please try again."));
