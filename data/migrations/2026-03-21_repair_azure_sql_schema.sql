@@ -14,7 +14,7 @@
 */
 
 IF OBJECT_ID('dbo.peer_feedback', 'U') IS NOT NULL
-    AND COL_LENGTH('dbo.peer_feedback', 'group_id') IS NULL
+    AND COL_LENGTH('dbo.peer_feedback', 'peer_tutor_group_id') IS NULL
 BEGIN
     EXEC sp_rename 'dbo.peer_feedback', 'peer_feedback_legacy';
 END
@@ -24,7 +24,7 @@ IF OBJECT_ID('dbo.peer_feedback', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.peer_feedback (
         id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-        group_id UNIQUEIDENTIFIER NOT NULL,
+        peer_tutor_group_id UNIQUEIDENTIFIER NOT NULL,
         session_id UNIQUEIDENTIFIER NOT NULL,
         reviewer_id UNIQUEIDENTIFIER NOT NULL,
         reviewee_id UNIQUEIDENTIFIER NOT NULL,
@@ -43,7 +43,7 @@ BEGIN
         ON dbo.peer_feedback (session_id, reviewer_id, reviewee_id);
 
     CREATE INDEX IX_peer_feedback_group_session
-        ON dbo.peer_feedback (group_id, session_id);
+        ON dbo.peer_feedback (peer_tutor_group_id, session_id);
 
     CREATE INDEX IX_peer_feedback_reviewee_session
         ON dbo.peer_feedback (reviewee_id, session_id);
