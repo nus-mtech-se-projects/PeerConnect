@@ -507,7 +507,7 @@ class AuthControllerTest {
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             @SuppressWarnings("unchecked")
             Map<String, Object> body = (Map<String, Object>) res.getBody();
-            assertThat((String) body.get("error")).isEqualTo("Microsoft login failed. Please try again.");
+            assertThat(body).containsEntry("error", "Microsoft login failed. Please try again.");
         }
     }
 }
