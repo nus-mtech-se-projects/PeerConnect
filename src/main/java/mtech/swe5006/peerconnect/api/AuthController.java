@@ -5,6 +5,7 @@ import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import mtech.swe5006.peerconnect.data.sql.PasswordResetToken;
 import mtech.swe5006.peerconnect.data.sql.PasswordResetTokenRepository;
 import mtech.swe5006.peerconnect.security.JwtService;
+import mtech.swe5006.peerconnect.service.AuditService;
 import mtech.swe5006.peerconnect.service.EmailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,7 @@ public class AuthController {
   private final JwtService jwtService;
   private final PasswordResetTokenRepository resetTokenRepository;
   private final EmailService emailService;
+  private final AuditService auditService;
   
   private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -34,20 +36,24 @@ public class AuthController {
       PasswordEncoder passwordEncoder,
       JwtService jwtService,
       PasswordResetTokenRepository resetTokenRepository,
-      EmailService emailService) {
+      EmailService emailService,
+      AuditService auditService) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
     this.resetTokenRepository = resetTokenRepository;
     this.emailService = emailService;
+    this.auditService = auditService;
   }
 
   @PostMapping("/register")
   public ResponseEntity<?> register(@RequestBody RegisterRequest req) {
     if (userRepository.existsByEmail(req.email())) {
+      recordAuthEvent("REGISTER_REJECTED", null, req.email(), "FAILURE", Map.of("reason", "duplicate_email"));
       return ResponseEntity.status(409).body(Map.of("error", "Email already registered"));
     }
     if (userRepository.existsByNusStudentId(req.nusStudentId())) {
+      recordAuthEvent("REGISTER_REJECTED", null, req.email(), "FAILURE", Map.of("reason", "duplicate_nus_student_id"));
       return ResponseEntity.status(409).body(Map.of("error", "NUS Student ID already registered"));
     }
 
@@ -62,6 +68,7 @@ public class AuthController {
     user.setStatus("active");
 
     userRepository.save(user);
+    recordAuthEvent("USER_REGISTERED", user, user.getEmail(), "SUCCESS", Map.of("authProvider", "local"));
 
     return ResponseEntity.ok(Map.of(
         "id", user.getId().toString(),
@@ -77,12 +84,15 @@ public class AuthController {
 
     boolean hasEmail = email != null && !email.isBlank();
     boolean hasNusId = nusStudentId != null && !nusStudentId.isBlank();
+    String loginMethod = hasEmail ? "email" : hasNusId ? "nusStudentId" : "unknown";
 
     if (password == null || password.isBlank()) {
+      recordAuthEvent("LOGIN_REJECTED", null, email, "FAILURE", Map.of("reason", "missing_password", "loginMethod", loginMethod));
       return ResponseEntity.badRequest().body(Map.of("error", "password is required"));
     }
 
     if (hasEmail == hasNusId) { // both true or both false
+      recordAuthEvent("LOGIN_REJECTED", null, email, "FAILURE", Map.of("reason", "invalid_identifier_selection", "loginMethod", loginMethod));
       return ResponseEntity.badRequest().body(Map.of(
           "error", "Provide exactly one of: email or nusStudentId"));
     }
@@ -92,10 +102,12 @@ public class AuthController {
         : userRepository.findByNusStudentId(nusStudentId).orElse(null);
 
     if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+      recordAuthEvent("LOGIN_FAILED", user, email, "FAILURE", Map.of("loginMethod", loginMethod));
       return ResponseEntity.status(401).body(Map.of("error", "Invalid credentials"));
     }
 
     invalidateUnusedTokens(user);
+    recordAuthEvent("LOGIN_SUCCEEDED", user, user.getEmail(), "SUCCESS", Map.of("loginMethod", loginMethod, "authProvider", "local"));
 
     String token = jwtService.generateAccessToken(user.getEmail());
     return ResponseEntity.ok(Map.of(
@@ -109,6 +121,7 @@ public class AuthController {
 public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     String idToken = body.get("idToken");
     if (idToken == null || idToken.isBlank()) {
+        recordAuthEvent("LOGIN_REJECTED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", "missing_id_token"));
         return ResponseEntity.badRequest().body(Map.of("error", "idToken required"));
     }
 
@@ -122,6 +135,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
         String oid  = claims.getStringClaim("oid"); // unique MS user ID
 
         if (email == null) {
+            recordAuthEvent("LOGIN_REJECTED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", "missing_email_claim"));
             return ResponseEntity.badRequest().body(Map.of("error", "No email in token"));
         }
 
@@ -143,6 +157,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
         });
 
         String token = jwtService.generateAccessToken(user.getEmail());
+        recordAuthEvent("LOGIN_SUCCEEDED", user, user.getEmail(), "SUCCESS", Map.of("authProvider", "microsoft"));
         return ResponseEntity.ok(Map.of(
             "accessToken", token,
             "email", user.getEmail(),
@@ -150,6 +165,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
         ));
 
     } catch (Exception e) {
+        recordAuthEvent("LOGIN_FAILED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", e.getClass().getSimpleName()));
         log.error("[MicrosoftLogin] Failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
         return ResponseEntity.status(400).body(Map.of("error", "Microsoft login failed. Please try again."));
     }
@@ -187,6 +203,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
     String code = generateAndStoreVerificationCode(user);
     emailService.sendResetCode(user.getEmail(), code);
+    recordAuthEvent("PASSWORD_RESET_REQUESTED", user, user.getEmail(), "SUCCESS", Map.of("flow", "forgot_password"));
 
     return ResponseEntity.ok(Map.of("message", "If the account exists, a code has been sent."));
   }
@@ -206,7 +223,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     }
 
     return verifyCodeAndUpdatePassword(user, req.code(), req.newPassword(),
-        "Password reset successfully.");
+        "Password reset successfully.", "PASSWORD_RESET_COMPLETED");
   }
 
   public record ForgotPasswordRequest(String email, String nusStudentId) {}
@@ -230,6 +247,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
     String code = generateAndStoreVerificationCode(user);
     emailService.sendChangePasswordCode(user.getEmail(), code);
+    recordAuthEvent("PASSWORD_CHANGE_REQUESTED", user, user.getEmail(), "SUCCESS", Map.of("flow", "change_password"));
 
     return ResponseEntity.ok(Map.of("message", "Verification code sent to your email."));
   }
@@ -252,7 +270,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     }
 
     return verifyCodeAndUpdatePassword(user, req.code(), req.newPassword(),
-        "Password changed successfully.");
+        "Password changed successfully.", "PASSWORD_CHANGE_COMPLETED");
   }
 
   // ── Private helpers (eliminate duplication) ────────────────────────────────
@@ -289,7 +307,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
   /** Validate code & password, verify the token, invalidate all tokens, and update the password. */
   private ResponseEntity<?> verifyCodeAndUpdatePassword(
-      User user, String code, String newPassword, String successMessage) {
+      User user, String code, String newPassword, String successMessage, String auditEventType) {
     if (code == null || code.isBlank()) {
       return ResponseEntity.badRequest().body("Verification code is required.");
     }
@@ -305,7 +323,25 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     invalidateUnusedTokens(user);
     user.setPasswordHash(passwordEncoder.encode(newPassword));
     userRepository.save(user);
+    recordAuthEvent(auditEventType, user, user.getEmail(), "SUCCESS", Map.of());
     return ResponseEntity.ok(Map.of("message", successMessage));
+  }
+
+  private void recordAuthEvent(String eventType,
+      User actor,
+      String actorEmail,
+      String outcome,
+      Map<String, Object> details) {
+    auditService.record(
+        eventType,
+        actor != null ? actor.getId() : null,
+        actorEmail,
+        "USER",
+        actor != null ? actor.getId() : null,
+        outcome,
+        null,
+        null,
+        details);
   }
 
   /** Extract email from JWT Authorization header. */

@@ -4,6 +4,7 @@ import mtech.swe5006.peerconnect.data.sql.PasswordResetTokenRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import mtech.swe5006.peerconnect.security.JwtService;
+import mtech.swe5006.peerconnect.service.AuditService;
 import mtech.swe5006.peerconnect.service.EmailService;
 import mtech.swe5006.peerconnect.api.AuthController;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +49,8 @@ class AuthControllerTest {
     private PasswordResetTokenRepository resetTokenRepository;
     @Mock
     private EmailService emailService;
+    @Mock
+    private AuditService auditService;
 
     @InjectMocks
     private AuthController controller;

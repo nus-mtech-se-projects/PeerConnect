@@ -5,6 +5,7 @@ import mtech.swe5006.peerconnect.data.sql.Profile;
 import mtech.swe5006.peerconnect.data.sql.ProfileRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.service.AuditService;
 import mtech.swe5006.peerconnect.service.AzureBlobService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,8 @@ class ProfileControllerTest {
     UserRepository userRepository;
     @Mock
     AzureBlobService azureBlobService;
+    @Mock
+    AuditService auditService;
 
     @InjectMocks
     ProfileController controller;

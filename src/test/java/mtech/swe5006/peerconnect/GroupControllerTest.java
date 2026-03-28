@@ -11,6 +11,7 @@ import mtech.swe5006.peerconnect.data.sql.StudySession;
 import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.service.AuditService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -47,6 +48,8 @@ class GroupControllerTest {
     PeerFeedbackRepository peerFeedbackRepository;
     @Mock
     JdbcTemplate jdbcTemplate;
+    @Mock
+    AuditService auditService;
 
     @InjectMocks
     GroupController controller;

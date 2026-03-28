@@ -10,6 +10,7 @@ import mtech.swe5006.peerconnect.data.sql.StudySession;
 import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.service.AuditService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -47,19 +48,22 @@ public class GroupController {
     private final PeerFeedbackRepository peerFeedbackRepository;
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final AuditService auditService;
 
     public GroupController(StudyGroupRepository groupRepository,
                            StudyGroupMemberRepository groupMemberRepository,
                            StudySessionRepository studySessionRepository,
                            PeerFeedbackRepository peerFeedbackRepository,
                            UserRepository userRepository,
-                           JdbcTemplate jdbcTemplate) {
+                           JdbcTemplate jdbcTemplate,
+                           AuditService auditService) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.studySessionRepository = studySessionRepository;
         this.peerFeedbackRepository = peerFeedbackRepository;
         this.userRepository = userRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.auditService = auditService;
     }
 
     @GetMapping
@@ -148,6 +152,17 @@ public class GroupController {
             log.error("[StudyGroup] FAILED to save owner membership: {}", ex.getMessage(), ex);
             // Group was saved; return success but log the member insert failure
         }
+
+        auditService.record(
+            "STUDY_GROUP_CREATED",
+            user.getId(),
+            user.getEmail(),
+            "STUDY_GROUP",
+            group.getId(),
+            "SUCCESS",
+            null,
+            null,
+            Map.of("approvalRequired", approvalRequired, "studyMode", studyMode));
 
         return ResponseEntity.ok(buildGroupDetails(group, user));
     }
@@ -251,6 +266,18 @@ public class GroupController {
         long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
         refreshGroupStatus(group);
         groupRepository.save(group);
+        if ("approved".equalsIgnoreCase(membership.getMembershipStatus())) {
+            auditService.record(
+                "GROUP_MEMBER_ADDED",
+                user.getId(),
+                user.getEmail(),
+                "STUDY_GROUP",
+                id,
+                "SUCCESS",
+                null,
+                null,
+                Map.of("membershipStatus", membership.getMembershipStatus()));
+        }
         return ResponseEntity.ok(Map.of(
             "joined", "approved".equalsIgnoreCase(membership.getMembershipStatus()),
             "alreadyJoined", false,
@@ -291,6 +318,16 @@ public class GroupController {
         long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
         refreshGroupStatus(group);
         groupRepository.save(group);
+        auditService.record(
+            "GROUP_MEMBER_LEFT",
+            user.getId(),
+            user.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of());
 
         return ResponseEntity.ok(Map.of(
             "left", true,
@@ -359,6 +396,16 @@ public class GroupController {
         membership.setRole("member");
         membership.setMembershipStatus("invited");
         groupMemberRepository.save(membership);
+        auditService.record(
+            "GROUP_MEMBER_INVITED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of("targetUserId", target.getId().toString()));
 
         return ResponseEntity.ok(Map.of("invited", true, "email", email));
     }
@@ -389,6 +436,16 @@ public class GroupController {
         groupMemberRepository.save(membership);
         refreshGroupStatus(group);
         groupRepository.save(group);
+        auditService.record(
+            "GROUP_MEMBER_ADDED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of("targetUserId", userId.toString(), "approvedByAdmin", true));
         return ResponseEntity.ok(Map.of("approved", true));
     }
 
@@ -417,6 +474,16 @@ public class GroupController {
             log.error("[RemoveMember] DB error for group {}: {}", id, ex.getMessage());
             return ResponseEntity.status(500).body(Map.of("error", "Failed to remove member. Please try again."));
         }
+        auditService.record(
+            "GROUP_MEMBER_REMOVED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of("targetUserId", userId.toString()));
         return ResponseEntity.ok(Map.of("removed", true));
     }
 
@@ -447,6 +514,16 @@ public class GroupController {
 
         group.setCreatedBy(newOwnerId);
         groupRepository.save(group);
+        auditService.record(
+            "GROUP_OWNERSHIP_TRANSFERRED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of("newOwnerUserId", newOwnerId.toString()));
         return ResponseEntity.ok(Map.of("transferred", true, "newOwnerUserId", newOwnerId));
     }
 
@@ -541,6 +618,16 @@ public class GroupController {
             log.error("[CreateSession] DB error for group {}: {}", id, ex.getMessage());
             return ResponseEntity.status(500).body(Map.of("error", "Failed to save session. Please try again."));
         }
+        auditService.record(
+            "STUDY_SESSION_CREATED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_SESSION",
+            session.getId(),
+            "SUCCESS",
+            null,
+            null,
+            Map.of("groupId", id.toString()));
 
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("id", session.getId().toString());
@@ -669,6 +756,19 @@ public class GroupController {
 
         PeerFeedback feedback = buildPeerFeedback(groupId, sessionId, reviewer.getId(), revieweeId, body);
         peerFeedbackRepository.save(feedback);
+        auditService.record(
+            "FEEDBACK_SUBMITTED",
+            reviewer.getId(),
+            reviewer.getEmail(),
+            "STUDY_SESSION",
+            sessionId,
+            "SUCCESS",
+            null,
+            null,
+            Map.of(
+                "groupId", groupId.toString(),
+                "revieweeId", revieweeId.toString(),
+                "anonymousToPeer", Boolean.TRUE.equals(feedback.getAnonymousToPeer())));
 
         return ResponseEntity.ok(buildFeedbackResponse(groupId, sessionId, revieweeId, reviewee, feedback));
     }
