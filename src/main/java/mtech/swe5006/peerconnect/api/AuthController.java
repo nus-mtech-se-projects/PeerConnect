@@ -202,7 +202,11 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     }
 
     String code = generateAndStoreVerificationCode(user);
-    emailService.sendResetCode(user.getEmail(), code);
+    try {
+      emailService.sendResetCode(user.getEmail(), code);
+    } catch (Exception e) {
+      log.error("[ForgotPassword] Failed to send reset code to {}: {}", user.getEmail(), e.getMessage());
+    }
     recordAuthEvent("PASSWORD_RESET_REQUESTED", user, user.getEmail(), "SUCCESS", Map.of("flow", "forgot_password"));
 
     return ResponseEntity.ok(Map.of("message", "If the account exists, a code has been sent."));
@@ -246,7 +250,11 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     }
 
     String code = generateAndStoreVerificationCode(user);
-    emailService.sendChangePasswordCode(user.getEmail(), code);
+    try {
+      emailService.sendChangePasswordCode(user.getEmail(), code);
+    } catch (Exception e) {
+      log.error("[ChangePasswordRequest] Failed to send code to {}: {}", user.getEmail(), e.getMessage());
+    }
     recordAuthEvent("PASSWORD_CHANGE_REQUESTED", user, user.getEmail(), "SUCCESS", Map.of("flow", "change_password"));
 
     return ResponseEntity.ok(Map.of("message", "Verification code sent to your email."));
@@ -357,4 +365,11 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
   }
 
   public record ChangePasswordRequest(String code, String newPassword) {}
+
+  @ExceptionHandler(Exception.class)
+  public ResponseEntity<?> handleException(Exception ex) {
+    log.error("[AuthController] Unhandled exception", ex);
+    return ResponseEntity.status(500).body(Map.of(
+        "error", ex.getMessage() != null ? ex.getMessage() : "Internal server error"));
+  }
 }

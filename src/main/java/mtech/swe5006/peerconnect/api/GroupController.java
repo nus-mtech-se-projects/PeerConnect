@@ -1,7 +1,5 @@
 package mtech.swe5006.peerconnect.api;
 
-import mtech.swe5006.peerconnect.data.sql.PeerFeedback;
-import mtech.swe5006.peerconnect.data.sql.PeerFeedbackRepository;
 import mtech.swe5006.peerconnect.data.sql.StudyGroup;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMember;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMemberRepository;
@@ -35,17 +33,9 @@ public class GroupController {
 
     private static final Logger log = LoggerFactory.getLogger(GroupController.class);
     private static final String SESSION_NOT_FOUND = "Session not found";
-    private static final String OVERALL_RATING = "overallRating";
-    private static final String PREPAREDNESS = "preparedness";
-    private static final String COMMUNICATION = "communication";
-    private static final String HELPFULNESS = "helpfulness";
-    private static final String CREATED_AT = "createdAt";
-    private static final String RELIABILITY = "reliability";
-
     private final StudyGroupRepository groupRepository;
     private final StudyGroupMemberRepository groupMemberRepository;
     private final StudySessionRepository studySessionRepository;
-    private final PeerFeedbackRepository peerFeedbackRepository;
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
     private final AuditService auditService;
@@ -53,14 +43,12 @@ public class GroupController {
     public GroupController(StudyGroupRepository groupRepository,
                            StudyGroupMemberRepository groupMemberRepository,
                            StudySessionRepository studySessionRepository,
-                           PeerFeedbackRepository peerFeedbackRepository,
                            UserRepository userRepository,
                            JdbcTemplate jdbcTemplate,
                            AuditService auditService) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.studySessionRepository = studySessionRepository;
-        this.peerFeedbackRepository = peerFeedbackRepository;
         this.userRepository = userRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.auditService = auditService;
@@ -115,29 +103,19 @@ public class GroupController {
         group.setCreatedBy(user.getId());
         group.setStatus("active");
         group.setMaxMembers(maxMembers);
-        UUID resolvedCourseId = resolveCourseId(body.get("courseId"), moduleCode);
-        if (resolvedCourseId == null) {
-            // Last resort: make course_id nullable in the DB so the group can be created without a course FK.
-            // NULL is always allowed by FK constraints; only the NOT NULL constraint blocks us.
-            try {
-                jdbcTemplate.execute("ALTER TABLE dbo.study_groups ALTER COLUMN course_id UNIQUEIDENTIFIER NULL");
-                log.info("[StudyGroup] Made study_groups.course_id nullable; proceeding without a course reference");
-                // leave group.courseId as null — Hibernate will omit it, DB now accepts NULL
-            } catch (Exception ex) {
-                log.error("[StudyGroup] Could not resolve course or alter table: {}", ex.getMessage());
-                return ResponseEntity.badRequest().body(Map.of("error", "No valid course found. Please provide a valid courseId."));
-            }
-        } else {
-            group.setCourseId(resolvedCourseId);
-        }
 
         try {
             log.info("[StudyGroup] Attempting to save new group: name='{}', createdBy={}", name, user.getId());
             groupRepository.save(group);
             log.info("[StudyGroup] Successfully saved group id={} into dbo.study_groups", group.getId());
         } catch (Exception ex) {
-            log.error("[StudyGroup] FAILED to save group into dbo.study_groups: {}", ex.getMessage(), ex);
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to save study group: " + ex.getMessage()));
+            log.warn("[StudyGroup] JPA save failed, retrying with JDBC fallback: {}", ex.getMessage());
+            try {
+                saveStudyGroupFallback(group, preferredSchedule);
+            } catch (Exception fallbackEx) {
+                log.error("[StudyGroup] FAILED to save group into dbo.study_groups: {}", fallbackEx.getMessage(), fallbackEx);
+                return ResponseEntity.status(500).body(Map.of("error", "Failed to save study group: " + fallbackEx.getMessage()));
+            }
         }
 
         StudyGroupMember ownerMembership = new StudyGroupMember();
@@ -179,12 +157,12 @@ public class GroupController {
         String name = firstNonBlank(asString(body.get("name")), group.getName());
         String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")), group.getModuleCode());
         String description = firstNonBlank(asString(body.get("description")), group.getDescription());
-        String topic = firstNonBlank(asString(body.get("topic")), group.getTopic(), moduleCode);
-        String studyMode = firstNonBlank(asString(body.get("studyMode")), group.getStudyMode(), "online").toLowerCase();
+        String topic = firstNonBlank(asString(body.get("topic")), group.getTopic());
+        String studyMode = firstNonBlank(asString(body.get("studyMode")), group.getStudyMode()).toLowerCase();
         String location = body.containsKey("location") ? asString(body.get("location")) : group.getLocation();
         String meetingLink = body.containsKey("meetingLink") ? asString(body.get("meetingLink")) : group.getMeetingLink();
         String preferredScheduleStr = asString(body.get("preferredSchedule"));
-        LocalDateTime preferredSchedule = preferredScheduleStr != null && !preferredScheduleStr.isBlank()
+        LocalDateTime preferredSchedule = body.containsKey("preferredSchedule")
             ? parseDateTime(preferredScheduleStr)
             : group.getPreferredSchedule();
         if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
@@ -210,7 +188,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(preferredSchedule);
+        group.setPreferredSchedule(body.containsKey("preferredSchedule") ? preferredSchedule : group.getPreferredSchedule());
         group.setMaxMembers(maxMembers);
         group.setApprovalRequired(approvalRequired);
         refreshGroupStatus(group);
@@ -534,12 +512,19 @@ public class GroupController {
         StudyGroup group = groupRepository.findById(id).orElse(null);
         if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
         if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can dissolve group"));
+        if ("dissolved".equalsIgnoreCase(group.getStatus())) return ResponseEntity.ok(Map.of("dissolved", true));
 
         try {
-            jdbcTemplate.update("UPDATE study_groups SET status = 'dissolved' WHERE id = ?", group.getId().toString());
+            group.setStatus("dissolved");
+            groupRepository.save(group);
         } catch (Exception ex) {
-            log.error("[Dissolve] DB error for group {}: {}", id, ex.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group. Please try again."));
+            log.warn("[Dissolve] JPA save failed for group {}. Retrying with SQL. Cause: {}", id, ex.getMessage());
+            try {
+                jdbcTemplate.update("UPDATE study_groups SET status = ? WHERE id = ?", "dissolved", group.getId());
+            } catch (Exception fallbackEx) {
+                log.error("[Dissolve] DB error for group {}: {}", id, fallbackEx.getMessage());
+                return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group. Please try again."));
+            }
         }
         return ResponseEntity.ok(Map.of("dissolved", true));
     }
@@ -553,7 +538,6 @@ public class GroupController {
         if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can delete group"));
 
         try {
-            peerFeedbackRepository.deleteByGroupId(id);
             jdbcTemplate.update("DELETE FROM study_sessions WHERE group_id = ?", id.toString());
             jdbcTemplate.update("DELETE FROM study_group_members WHERE group_id = ?", id.toString());
             jdbcTemplate.update("DELETE FROM study_groups WHERE id = ?", id.toString());
@@ -699,78 +683,8 @@ public class GroupController {
         if (session == null || !id.equals(session.getGroupId())) {
             return ResponseEntity.status(404).body(Map.of("error", SESSION_NOT_FOUND));
         }
-        peerFeedbackRepository.deleteBySessionId(sessionId);
         studySessionRepository.delete(session);
         return ResponseEntity.ok(Map.of("deleted", true));
-    }
-
-    @PostMapping("/{groupId}/sessions/{sessionId}/feedback")
-    public ResponseEntity<Map<String, Object>> submitFeedback(@PathVariable UUID groupId,
-                                                              @PathVariable UUID sessionId,
-                                                              Authentication auth,
-                                                              @RequestBody Map<String, Object> body) {
-        User reviewer = getCurrentUser(auth);
-        if (auth == null || reviewer == null) {
-            return ResponseEntity.status(401).body(Map.of("error", "Authentication required"));
-        }
-
-        StudyGroup group = groupRepository.findById(groupId).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-
-        StudyGroupMember reviewerMembership = groupMemberRepository.findByGroupIdAndUserId(groupId, reviewer.getId()).orElse(null);
-        if (!isApprovedMembership(reviewerMembership)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Reviewer must be an approved member of the group"));
-        }
-
-        StudySession session = studySessionRepository.findById(sessionId).orElse(null);
-        ResponseEntity<Map<String, Object>> sessionValidationError = validateFeedbackSession(groupId, sessionId, session);
-        if (sessionValidationError != null) return sessionValidationError;
-
-        ResponseEntity<Map<String, Object>> payloadValidationError = validateFeedbackPayloadIds(groupId, sessionId, body);
-        if (payloadValidationError != null) return payloadValidationError;
-
-        UUID revieweeId = parseUuid(asString(body.get("revieweeId")));
-        if (revieweeId == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "revieweeId is required"));
-        }
-        if (reviewer.getId().equals(revieweeId)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "You cannot submit feedback for yourself"));
-        }
-
-        StudyGroupMember revieweeMembership = groupMemberRepository.findByGroupIdAndUserId(groupId, revieweeId).orElse(null);
-        if (!isApprovedMembership(revieweeMembership)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Reviewee must be an approved member of the group"));
-        }
-
-        User reviewee = userRepository.findById(revieweeId).orElse(null);
-        if (reviewee == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "Reviewee not found"));
-        }
-
-        String ratingError = validateFeedbackRatings(body);
-        if (ratingError != null) return ResponseEntity.badRequest().body(Map.of("error", ratingError));
-
-        if (peerFeedbackRepository.existsBySessionIdAndReviewerIdAndRevieweeId(sessionId, reviewer.getId(), revieweeId)) {
-            return ResponseEntity.status(409).body(Map.of("error", "Feedback has already been submitted for this peer and session"));
-        }
-
-        PeerFeedback feedback = buildPeerFeedback(groupId, sessionId, reviewer.getId(), revieweeId, body);
-        peerFeedbackRepository.save(feedback);
-        auditService.record(
-            "FEEDBACK_SUBMITTED",
-            reviewer.getId(),
-            reviewer.getEmail(),
-            "STUDY_SESSION",
-            sessionId,
-            "SUCCESS",
-            null,
-            null,
-            Map.of(
-                "groupId", groupId.toString(),
-                "revieweeId", revieweeId.toString(),
-                "anonymousToPeer", Boolean.TRUE.equals(feedback.getAnonymousToPeer())));
-
-        return ResponseEntity.ok(buildFeedbackResponse(groupId, sessionId, revieweeId, reviewee, feedback));
     }
 
     @GetMapping("/{id}")
@@ -804,7 +718,7 @@ public class GroupController {
                 row.put("moduleCode", g.getModuleCode());
                 row.put("status", g.getStatus());
                 row.put("createdBy", g.getCreatedBy());
-                row.put(CREATED_AT, g.getCreatedAt());
+                row.put("createdAt", g.getCreatedAt());
                 return row;
             }).toList();
             return ResponseEntity.ok(Map.of(
@@ -841,74 +755,6 @@ public class GroupController {
     private boolean isMember(UUID groupId, UUID userId) {
         StudyGroupMember membership = groupMemberRepository.findByGroupIdAndUserId(groupId, userId).orElse(null);
         return membership != null && "approved".equalsIgnoreCase(membership.getMembershipStatus());
-    }
-
-    private boolean isApprovedMembership(StudyGroupMember membership) {
-        return membership != null && "approved".equalsIgnoreCase(membership.getMembershipStatus());
-    }
-
-    private ResponseEntity<Map<String, Object>> validateFeedbackSession(UUID groupId, UUID sessionId, StudySession session) {
-        if (session == null) return ResponseEntity.status(404).body(Map.of("error", SESSION_NOT_FOUND));
-        if (!groupId.equals(session.getGroupId())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Session does not belong to the specified group"));
-        }
-        if (session.getStartsAt() == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Feedback can only be submitted for scheduled sessions"));
-        }
-        return null;
-    }
-
-    private ResponseEntity<Map<String, Object>> validateFeedbackPayloadIds(UUID groupId, UUID sessionId, Map<String, Object> body) {
-        UUID bodyGroupId = parseUuid(asString(body.get("groupId")));
-        if (bodyGroupId != null && !groupId.equals(bodyGroupId)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "groupId in payload must match the route"));
-        }
-
-        UUID bodySessionId = parseUuid(asString(body.get("sessionId")));
-        if (bodySessionId != null && !sessionId.equals(bodySessionId)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "sessionId in payload must match the route"));
-        }
-        return null;
-    }
-
-    private String validateFeedbackRatings(Map<String, Object> body) {
-        List<String> ratingFields = List.of(OVERALL_RATING, PREPAREDNESS, COMMUNICATION, HELPFULNESS, RELIABILITY);
-        for (String ratingField : ratingFields) {
-            String ratingError = validateRating(ratingField, body.get(ratingField));
-            if (ratingError != null) {
-                return ratingError;
-            }
-        }
-        return null;
-    }
-
-    private PeerFeedback buildPeerFeedback(UUID groupId, UUID sessionId, UUID reviewerId, UUID revieweeId, Map<String, Object> body) {
-        PeerFeedback feedback = new PeerFeedback();
-        feedback.setGroupId(groupId);
-        feedback.setSessionId(sessionId);
-        feedback.setReviewerId(reviewerId);
-        feedback.setRevieweeId(revieweeId);
-        feedback.setOverallRating(asShort(body.get(OVERALL_RATING), null));
-        feedback.setPreparedness(asShort(body.get(PREPAREDNESS), null));
-        feedback.setCommunication(asShort(body.get(COMMUNICATION), null));
-        feedback.setHelpfulness(asShort(body.get(HELPFULNESS), null));
-        feedback.setReliability(asShort(body.get(RELIABILITY), null));
-        feedback.setStrengths(asString(body.get("strengths")));
-        feedback.setImprovements(asString(body.get("improvements")));
-        feedback.setAnonymousToPeer(asBoolean(body.get("anonymousToPeer"), false));
-        return feedback;
-    }
-
-    private Map<String, Object> buildFeedbackResponse(UUID groupId, UUID sessionId, UUID revieweeId, User reviewee, PeerFeedback feedback) {
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("id", feedback.getId() != null ? feedback.getId().toString() : null);
-        response.put("groupId", groupId.toString());
-        response.put("sessionId", sessionId.toString());
-        response.put("revieweeId", revieweeId.toString());
-        response.put("revieweeName", buildDisplayName(reviewee));
-        response.put("anonymousToPeer", Boolean.TRUE.equals(feedback.getAnonymousToPeer()));
-        response.put(CREATED_AT, feedback.getCreatedAt() != null ? feedback.getCreatedAt().toString() : null);
-        return response;
     }
 
     private void refreshGroupStatus(StudyGroup group) {
@@ -962,6 +808,7 @@ public class GroupController {
         row.put("id", group.getId());
         row.put("name", firstNonBlank(group.getName(), group.getTopic(), "Study Group"));
         row.put("moduleCode", firstNonBlank(group.getModuleCode(), group.getTopic(), "General"));
+        row.put("courseId", group.getCourseId() != null ? group.getCourseId().toString() : null);
         row.put("courseCode", firstNonBlank(group.getModuleCode(), group.getTopic(), "General"));
         row.put("topic", group.getTopic());
         row.put("description", group.getDescription());
@@ -974,7 +821,7 @@ public class GroupController {
         row.put("maxMembers", group.getMaxMembers());
         row.put("status", group.getStatus());
         row.put("approvalRequired", Boolean.TRUE.equals(group.getApprovalRequired()));
-        row.put(CREATED_AT, group.getCreatedAt());
+        row.put("createdAt", group.getCreatedAt());
         row.put("memberCount", approvedCount);
         row.put("pendingCount", pendingCount);
         row.put("joined", currentMembership != null && "approved".equalsIgnoreCase(currentMembership.getMembershipStatus()));
@@ -1046,21 +893,6 @@ public class GroupController {
         return "true".equalsIgnoreCase(String.valueOf(value));
     }
 
-    private String validateRating(String fieldName, Object value) {
-        Short rating = asShort(value, null);
-        if (rating == null) return fieldName + " is required";
-        if (rating < 1 || rating > 5) return fieldName + " must be between 1 and 5";
-        return null;
-    }
-
-    private String buildDisplayName(User user) {
-        if (user == null) return null;
-        String firstName = user.getFirstName() != null ? user.getFirstName().trim() : "";
-        String lastName = user.getLastName() != null ? user.getLastName().trim() : "";
-        String fullName = (firstName + " " + lastName).trim();
-        return fullName.isBlank() ? user.getEmail() : fullName;
-    }
-
     private UUID parseUuid(String value) {
         if (value == null || value.isBlank()) return null;
         try {
@@ -1090,215 +922,40 @@ public class GroupController {
         return null;
     }
 
-    private UUID resolveCourseId(Object courseIdValue, String moduleCode) {
-        String normalizedModuleCode = (moduleCode == null || moduleCode.isBlank())
-                ? "general"
-                : moduleCode.trim().toLowerCase();
+    private void saveStudyGroupFallback(StudyGroup group, LocalDateTime preferredSchedule) {
+        if (group.getId() == null) group.setId(UUID.randomUUID());
+        if (group.getStatus() == null) group.setStatus("active");
+        if (group.getCreatedAt() == null) group.setCreatedAt(LocalDateTime.now());
 
-        if (courseIdValue instanceof String raw && !raw.isBlank()) {
-            try {
-                UUID parsed = UUID.fromString(raw.trim());
-                if (courseExists(parsed)) {
-                    return parsed;
-                }
-                log.warn("[StudyGroup] Provided courseId '{}' does not exist in dbo.courses.", raw);
-            } catch (IllegalArgumentException ex) {
-                log.warn("[StudyGroup] Invalid courseId '{}' in request.", raw);
-            }
-        }
-
-        UUID byModule = findCourseIdByModule(normalizedModuleCode);
-        if (byModule != null) {
-            return byModule;
-        }
-
-        UUID anyExisting = findAnyCourseId();
-        if (anyExisting != null) {
-            return anyExisting;
-        }
-
-        UUID created = createFallbackCourse(moduleCode);
-        if (created != null) {
-            return created;
-        }
-
-        return findAnyCourseId();
-    }
-
-    private boolean courseExists(UUID courseId) {
-        try {
-            Integer count = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(1) FROM dbo.courses WHERE id = ?",
-                    Integer.class,
-                    courseId
-            );
-            if (count != null && count > 0) {
-                return true;
-            }
-        } catch (Exception ignored) {
-        }
-
-        try {
-            Integer count = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(1) FROM dbo.courses WHERE course_id = ?",
-                    Integer.class,
-                    courseId
-            );
-            return count != null && count > 0;
-        } catch (Exception ex) {
-            log.debug("[StudyGroup] courseExists lookup failed for '{}': {}", courseId, ex.getMessage());
-            return false;
-        }
-    }
-
-    private UUID findCourseIdByModule(String normalizedModuleCode) {
-        List<Object[]> attempts = List.of(
-                new Object[]{"SELECT TOP 1 id FROM dbo.courses WHERE LOWER(code)=? OR LOWER(name)=?", new Object[]{normalizedModuleCode, normalizedModuleCode}},
-                new Object[]{"SELECT TOP 1 id FROM dbo.courses WHERE LOWER(module_code)=? OR LOWER(course_code)=? OR LOWER(name)=?", new Object[]{normalizedModuleCode, normalizedModuleCode, normalizedModuleCode}},
-                new Object[]{"SELECT TOP 1 course_id FROM dbo.courses WHERE LOWER(code)=? OR LOWER(name)=?", new Object[]{normalizedModuleCode, normalizedModuleCode}},
-                new Object[]{"SELECT TOP 1 course_id FROM dbo.courses WHERE LOWER(module_code)=? OR LOWER(course_code)=? OR LOWER(name)=?", new Object[]{normalizedModuleCode, normalizedModuleCode, normalizedModuleCode}}
+        jdbcTemplate.update(
+            """
+            INSERT INTO study_groups
+                (id, topic, name, module_code, course_id, description, meeting_link, preferred_schedule,
+                 study_mode, location, created_by, max_members, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            group.getId().toString(),
+            group.getTopic(),
+            group.getName(),
+            group.getModuleCode(),
+            group.getCourseId() != null ? group.getCourseId().toString() : null,
+            group.getDescription(),
+            group.getMeetingLink(),
+            preferredSchedule,
+            group.getStudyMode(),
+            group.getLocation(),
+            group.getCreatedBy().toString(),
+            group.getMaxMembers(),
+            group.getStatus(),
+            group.getCreatedAt()
         );
-
-        for (Object[] attempt : attempts) {
-            String sql = (String) attempt[0];
-            Object[] params = (Object[]) attempt[1];
-            try {
-                List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, params);
-                if (!rows.isEmpty()) {
-                    UUID parsed = extractUuid(rows.get(0).values().stream().findFirst().orElse(null));
-                    if (parsed != null) {
-                        return parsed;
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        return null;
     }
 
-    private UUID findAnyCourseId() {
-        List<String> attempts = List.of(
-                "SELECT TOP 1 id FROM dbo.courses",
-                "SELECT TOP 1 course_id FROM dbo.courses"
-        );
-
-        for (String sql : attempts) {
-            try {
-                List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
-                if (!rows.isEmpty()) {
-                    UUID parsed = extractUuid(rows.get(0).values().stream().findFirst().orElse(null));
-                    if (parsed != null) {
-                        return parsed;
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        return null;
-    }
-
-    private UUID createFallbackCourse(String moduleCode) {
-        String code = (moduleCode == null || moduleCode.isBlank()) ? "GENERAL" : moduleCode.trim().toUpperCase();
-        String name = code + " Course";
-
-        // Strategy 1: Discover the actual dbo.courses schema and build a dynamic INSERT
-        try {
-            List<Map<String, Object>> cols = jdbcTemplate.queryForList(
-                    "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT " +
-                    "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='courses' ORDER BY ORDINAL_POSITION"
-            );
-            log.info("[StudyGroup] dbo.courses schema: {}",
-                    cols.stream().map(c -> c.get("COLUMN_NAME") + "(" + c.get("DATA_TYPE") + ",nullable=" + c.get("IS_NULLABLE") + ")")
-                            .collect(Collectors.joining(",")));
-
-            List<String> colDefs = new ArrayList<>();
-            List<Object> params = new ArrayList<>();
-            for (Map<String, Object> col : cols) {
-                String colName = String.valueOf(col.get("COLUMN_NAME"));
-                String dataType = String.valueOf(col.get("DATA_TYPE")).toLowerCase();
-                boolean nullable = "YES".equalsIgnoreCase(String.valueOf(col.get("IS_NULLABLE")));
-                Object defaultVal = col.get("COLUMN_DEFAULT");
-                boolean hasDefault = defaultVal != null && !String.valueOf(defaultVal).equalsIgnoreCase("null");
-                if (nullable || hasDefault) continue; // skip optional columns
-
-                colDefs.add(colName);
-                String lower = colName.toLowerCase();
-                if (dataType.equals("uniqueidentifier")) {
-                    params.add(UUID.randomUUID());
-                } else if (dataType.contains("int")) {
-                    params.add(0);
-                } else if (dataType.equals("bit")) {
-                    params.add(false);
-                } else {
-                    params.add(lower.contains("code") ? code : name);
-                }
-            }
-            if (!colDefs.isEmpty()) {
-                String insertSql = "INSERT INTO dbo.courses (" +
-                        String.join(", ", colDefs) + ") VALUES (" +
-                        String.join(", ", Collections.nCopies(colDefs.size(), "?")) + ")";
-                log.info("[StudyGroup] Dynamic course INSERT: {}", insertSql);
-                jdbcTemplate.update(insertSql, params.toArray());
-                UUID created = findAnyCourseId();
-                if (created != null) {
-                    log.info("[StudyGroup] Created fallback course via schema discovery, id={}", created);
-                    return created;
-                }
-            }
-        } catch (Exception ex) {
-            log.warn("[StudyGroup] Schema-discovery course insert failed: {}", ex.getMessage());
-        }
-
-        // Strategy 2: DEFAULT VALUES (works when every column has a default)
-        try {
-            jdbcTemplate.update("INSERT INTO dbo.courses DEFAULT VALUES");
-            UUID created = findAnyCourseId();
-            if (created != null) {
-                return created;
-            }
-        } catch (Exception ignored) {
-        }
-
-        // Strategy 3: Known column-name patterns
-        List<Object[]> attempts = List.of(
-                new Object[]{"INSERT INTO dbo.courses (id, code, name) VALUES (NEWID(), ?, ?)", new Object[]{code, name}},
-                new Object[]{"INSERT INTO dbo.courses (id, name) VALUES (NEWID(), ?)", new Object[]{name}},
-                new Object[]{"INSERT INTO dbo.courses (id, course_code, name) VALUES (NEWID(), ?, ?)", new Object[]{code, name}}
-        );
-
-        for (Object[] attempt : attempts) {
-            String sql = (String) attempt[0];
-            Object[] ps = (Object[]) attempt[1];
-            try {
-                jdbcTemplate.update(sql, ps);
-                UUID created = findAnyCourseId();
-                if (created != null) {
-                    log.info("[StudyGroup] Created fallback course '{}', id={}", code, created);
-                    return created;
-                }
-            } catch (Exception ex) {
-                log.debug("[StudyGroup] Fallback course insert attempt failed: {}", ex.getMessage());
-            }
-        }
-
-        return null;
-    }
-
-    private UUID extractUuid(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof UUID uuid) {
-            return uuid;
-        }
-        String text = String.valueOf(value).trim();
-        if (text.isEmpty()) {
-            return null;
-        }
-        try {
-            return UUID.fromString(text);
-        } catch (Exception ex) {
-            return null;
-        }
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleException(Exception ex) {
+        log.error("[GroupController] Unhandled exception", ex);
+        return ResponseEntity.status(500).body(Map.of(
+            "error", ex.getMessage() != null ? ex.getMessage() : "Internal server error"
+        ));
     }
 }

@@ -13,7 +13,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "peer_feedback", indexes = {
-    @Index(name = "IX_peer_feedback_group_session", columnList = "group_id, session_id"),
+    @Index(name = "IX_peer_feedback_group_session", columnList = "peer_tutor_group_id, session_id"),
     @Index(name = "IX_peer_feedback_reviewee_session", columnList = "reviewee_id, session_id")
 }, uniqueConstraints = {
     @UniqueConstraint(name = "UQ_peer_feedback_submission", columnNames = {"session_id", "reviewer_id", "reviewee_id"})
@@ -24,8 +24,8 @@ public class PeerFeedback {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "group_id", nullable = false)
-    private UUID groupId;
+    @Column(name = "peer_tutor_group_id", nullable = false)
+    private UUID peerTutorGroupId;
 
     @Column(name = "session_id", nullable = false)
     private UUID sessionId;
@@ -73,8 +73,8 @@ public class PeerFeedback {
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
-    public UUID getGroupId() { return groupId; }
-    public void setGroupId(UUID groupId) { this.groupId = groupId; }
+    public UUID getPeerTutorGroupId() { return peerTutorGroupId; }
+    public void setPeerTutorGroupId(UUID peerTutorGroupId) { this.peerTutorGroupId = peerTutorGroupId; }
 
     public UUID getSessionId() { return sessionId; }
     public void setSessionId(UUID sessionId) { this.sessionId = sessionId; }

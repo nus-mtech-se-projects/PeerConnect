@@ -7,6 +7,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import jakarta.servlet.http.HttpServletResponse;
 
 
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -39,7 +42,10 @@ public class SecurityConfig {
             .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
             .requestMatchers("/error").permitAll()
             .anyRequest().authenticated())
-        .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+        .exceptionHandling(ex -> ex
+            .authenticationEntryPoint(unauthorizedEntryPoint())
+            .accessDeniedHandler(forbiddenHandler()));
     return http.build();
   }
 
@@ -68,5 +74,23 @@ public class SecurityConfig {
   @Bean
   AuthenticationManager authenticationManager(AuthenticationConfiguration cfg) throws Exception {
     return cfg.getAuthenticationManager();
+  }
+
+  @Bean
+  AuthenticationEntryPoint unauthorizedEntryPoint() {
+    return (request, response, authException) -> {
+      response.setContentType("application/json");
+      response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+      response.getWriter().write("{\"error\":\"Authentication required\"}");
+    };
+  }
+
+  @Bean
+  AccessDeniedHandler forbiddenHandler() {
+    return (request, response, accessDeniedException) -> {
+      response.setContentType("application/json");
+      response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+      response.getWriter().write("{\"error\":\"Access denied\"}");
+    };
   }
 }

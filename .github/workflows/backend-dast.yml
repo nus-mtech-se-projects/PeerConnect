@@ -21,6 +21,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Wait for application to be reachable
+        run: |
+          echo "Checking application is reachable via POST /api/auth/login ..."
+          for i in $(seq 1 18); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X POST -H "Content-Type: application/json" \
+              -d '{}' \
+              "${{ vars.AZURE_WEBAPP_URL }}/api/auth/login" || echo "000")
+            echo "Attempt $i: HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "200" ]; then
+              echo "Application is reachable"
+              break
+            fi
+            if [ "$i" -eq 18 ]; then
+              echo "Application did not respond in time — aborting DAST"
+              exit 1
+            fi
+            sleep 10
+          done
+
       - name: Authenticate and obtain JWT
         id: auth
         env:
