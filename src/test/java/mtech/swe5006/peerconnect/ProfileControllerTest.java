@@ -27,7 +27,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -258,6 +260,35 @@ class ProfileControllerTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> body = (Map<String, Object>) res.getBody();
             assertThat(body).containsKey("message");
+        }
+
+        @Test
+        void successfulUpdateRecordsAuditEvent() {
+            when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(alice));
+            when(profileRepository.findByUserId(alice.getId())).thenReturn(Optional.of(profile));
+            when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(profileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("firstName", "Alicia");
+            body.put("faculty", "Engineering");
+
+            controller.updateProfile(authFor(alice), body);
+
+            verify(auditService).record(
+                eq("PROFILE_UPDATED"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("USER"),
+                eq(alice.getId()),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                argThat(details ->
+                    details.containsKey("updatedFields")
+                        && details.get("updatedFields").toString().contains("firstName")
+                        && details.get("updatedFields").toString().contains("faculty"))
+            );
         }
     }
 

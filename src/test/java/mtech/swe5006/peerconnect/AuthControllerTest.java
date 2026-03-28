@@ -27,13 +27,17 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
 import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -106,6 +110,16 @@ class AuthControllerTest {
             Map<String, String> body = (Map<String, String>) res.getBody();
             assertThat(body).containsKey("id");
             assertThat(body).containsEntry("email", "alice@u.nus.edu");
+            verify(auditService).record(
+                    eq("USER_REGISTERED"),
+                    any(),
+                    eq("alice@u.nus.edu"),
+                    eq("USER"),
+                    any(),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    argThat(details -> "local".equals(details.get("authProvider"))));
         }
 
         @Test
@@ -157,6 +171,16 @@ class AuthControllerTest {
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
             assertThat(res.getBody().toString()).contains("Email already registered");
             verify(userRepository, never()).save(any());
+            verify(auditService).record(
+                    eq("REGISTER_REJECTED"),
+                    isNull(),
+                    eq("alice@u.nus.edu"),
+                    eq("USER"),
+                    isNull(),
+                    eq("FAILURE"),
+                    isNull(),
+                    isNull(),
+                    argThat(details -> "duplicate_email".equals(details.get("reason"))));
         }
 
         @Test
@@ -200,6 +224,18 @@ class AuthControllerTest {
             assertThat(body).containsEntry("email", "alice@u.nus.edu");
             assertThat(body).containsEntry("nusStudentId", "A1234567X");
             assertThat(body).containsEntry("expiresInSeconds", 900L);
+            verify(auditService).record(
+                    eq("LOGIN_SUCCEEDED"),
+                    eq(savedUser.getId()),
+                    eq("alice@u.nus.edu"),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    argThat(details ->
+                            "email".equals(details.get("loginMethod"))
+                                    && "local".equals(details.get("authProvider"))));
         }
 
         @Test
@@ -257,6 +293,16 @@ class AuthControllerTest {
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
             verify(jwtService, never()).generateAccessToken(anyString());
+            verify(auditService).record(
+                    eq("LOGIN_FAILED"),
+                    eq(savedUser.getId()),
+                    eq("alice@u.nus.edu"),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("FAILURE"),
+                    isNull(),
+                    isNull(),
+                    argThat(details -> "email".equals(details.get("loginMethod"))));
         }
 
         @Test
@@ -267,6 +313,18 @@ class AuthControllerTest {
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             assertThat(res.getBody().toString()).contains("password is required");
+            verify(auditService).record(
+                    eq("LOGIN_REJECTED"),
+                    isNull(),
+                    eq("alice@u.nus.edu"),
+                    eq("USER"),
+                    isNull(),
+                    eq("FAILURE"),
+                    isNull(),
+                    isNull(),
+                    argThat(details ->
+                            "missing_password".equals(details.get("reason"))
+                                    && "email".equals(details.get("loginMethod"))));
         }
 
         @Test
@@ -353,6 +411,16 @@ class AuthControllerTest {
             assertThat(body).containsEntry("expiresInSeconds", 900L);
 
             verify(userRepository, never()).save(any());
+            verify(auditService).record(
+                    eq("LOGIN_SUCCEEDED"),
+                    eq(savedUser.getId()),
+                    eq("alice@u.nus.edu"),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    argThat(details -> "microsoft".equals(details.get("authProvider"))));
         }
 
         @Test
@@ -475,6 +543,18 @@ class AuthControllerTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> body = (Map<String, Object>) res.getBody();
             assertThat(body).containsEntry("error", "idToken required");
+            verify(auditService).record(
+                    eq("LOGIN_REJECTED"),
+                    isNull(),
+                    isNull(),
+                    eq("USER"),
+                    isNull(),
+                    eq("FAILURE"),
+                    isNull(),
+                    isNull(),
+                    argThat(details ->
+                            "microsoft".equals(details.get("authProvider"))
+                                    && "missing_id_token".equals(details.get("reason"))));
         }
 
         @Test
@@ -511,6 +591,125 @@ class AuthControllerTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> body = (Map<String, Object>) res.getBody();
             assertThat(body).containsEntry("error", "Microsoft login failed. Please try again.");
+            verify(auditService).record(
+                    eq("LOGIN_FAILED"),
+                    isNull(),
+                    isNull(),
+                    eq("USER"),
+                    isNull(),
+                    eq("FAILURE"),
+                    isNull(),
+                    isNull(),
+                    argThat(details ->
+                            "microsoft".equals(details.get("authProvider"))
+                                    && details.get("reason") != null));
+        }
+    }
+
+    @Nested
+    @DisplayName("Password reset and change audit events")
+    class PasswordFlows {
+
+        @Test
+        void forgotPassword_recordsAuditEvent() {
+            when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(savedUser));
+
+            ResponseEntity<?> res = controller.forgotPassword(
+                    new AuthController.ForgotPasswordRequest("alice@u.nus.edu", null));
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(auditService).record(
+                    eq("PASSWORD_RESET_REQUESTED"),
+                    eq(savedUser.getId()),
+                    eq(savedUser.getEmail()),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    argThat(details -> "forgot_password".equals(details.get("flow"))));
+        }
+
+        @Test
+        void resetPassword_recordsAuditEvent() {
+            PasswordResetToken token = new PasswordResetToken();
+            token.setUserId(savedUser.getId());
+            token.setToken("123456");
+
+            when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(savedUser));
+            when(resetTokenRepository.findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
+                    eq(savedUser.getId()), eq("123456"), any(LocalDateTime.class)))
+                    .thenReturn(Optional.of(token));
+            when(resetTokenRepository.findByUserIdAndUsedAtIsNull(savedUser.getId())).thenReturn(java.util.List.of());
+            when(passwordEncoder.encode("new-pass")).thenReturn("new-hash");
+
+            ResponseEntity<?> res = controller.resetPassword(
+                    new AuthController.ResetPasswordRequest("alice@u.nus.edu", null, "123456", "new-pass"));
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(auditService).record(
+                    eq("PASSWORD_RESET_COMPLETED"),
+                    eq(savedUser.getId()),
+                    eq(savedUser.getEmail()),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    eq(Map.of()));
+        }
+
+        @Test
+        void changePasswordRequest_recordsAuditEvent() {
+            when(jwtService.isValid("token")).thenReturn(true);
+            when(jwtService.extractUsername("token")).thenReturn(savedUser.getEmail());
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+
+            ResponseEntity<?> res = controller.changePasswordRequest("Bearer token");
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(auditService).record(
+                    eq("PASSWORD_CHANGE_REQUESTED"),
+                    eq(savedUser.getId()),
+                    eq(savedUser.getEmail()),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    argThat(details -> "change_password".equals(details.get("flow"))));
+        }
+
+        @Test
+        void changePasswordConfirm_recordsAuditEvent() {
+            PasswordResetToken token = new PasswordResetToken();
+            token.setUserId(savedUser.getId());
+            token.setToken("654321");
+
+            when(jwtService.isValid("token")).thenReturn(true);
+            when(jwtService.extractUsername("token")).thenReturn(savedUser.getEmail());
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+            when(resetTokenRepository.findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
+                    eq(savedUser.getId()), eq("654321"), any(LocalDateTime.class)))
+                    .thenReturn(Optional.of(token));
+            when(resetTokenRepository.findByUserIdAndUsedAtIsNull(savedUser.getId())).thenReturn(java.util.List.of());
+            when(passwordEncoder.encode("new-pass")).thenReturn("new-hash");
+
+            ResponseEntity<?> res = controller.changePasswordConfirm(
+                    new AuthController.ChangePasswordRequest("654321", "new-pass"),
+                    "Bearer token");
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(auditService).record(
+                    eq("PASSWORD_CHANGE_COMPLETED"),
+                    eq(savedUser.getId()),
+                    eq(savedUser.getEmail()),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    eq(Map.of()));
         }
     }
 }

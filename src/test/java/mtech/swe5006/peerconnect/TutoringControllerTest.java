@@ -2,7 +2,7 @@ package mtech.swe5006.peerconnect;
 
 import mtech.swe5006.peerconnect.api.TutoringController;
 import mtech.swe5006.peerconnect.data.sql.*;
-import mtech.swe5006.peerconnect.service.AuditService;
+import mtech.swe5006.peerconnect.service.audit.TutoringAuditFacade;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -33,7 +33,7 @@ class TutoringControllerTest {
     @Mock
     private PeerFeedbackRepository peerFeedbackRepository;
     @Mock
-    private AuditService auditService;
+    private TutoringAuditFacade tutoringAuditFacade;
 
     @InjectMocks
     private TutoringController controller;
@@ -105,6 +105,7 @@ class TutoringControllerTest {
             verify(peerFeedbackRepository).save(captor.capture());
             assertThat(captor.getValue().getReviewerId()).isEqualTo(alice.getId());
             assertThat(captor.getValue().getRevieweeId()).isEqualTo(bob.getId());
+            verify(tutoringAuditFacade).feedbackSubmitted(alice, classId, bob.getId(), true);
         }
 
         @Test
@@ -170,6 +171,11 @@ class TutoringControllerTest {
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("title")).isEqualTo("Advanced Java");
             verify(tutoringClassRepository).save(any());
+            verify(tutoringAuditFacade).classCreated(eq(alice), argThat(createdClass ->
+                "CS5000".equals(createdClass.getModuleCode())
+                    && "online".equals(createdClass.getMode())
+                    && Short.valueOf((short) 5).equals(createdClass.getMaxStudents())
+            ));
         }
 
         @Test
@@ -236,6 +242,7 @@ class TutoringControllerTest {
             verify(tutoringClassRepository).delete(tutoringClass);
             verify(tutoringEnrollmentRepository).deleteByClassId(classId);
             verify(peerFeedbackRepository).deleteByPeerTutorGroupId(classId);
+            verify(tutoringAuditFacade).classDeleted(alice, classId);
         }
 
         @Test
@@ -283,6 +290,7 @@ class TutoringControllerTest {
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("enrolled")).isEqualTo(true);
             verify(tutoringEnrollmentRepository).save(any(TutoringEnrollment.class));
+            verify(tutoringAuditFacade).classEnrolled(alice, classId, 3L);
         }
 
         @Test
@@ -341,6 +349,7 @@ class TutoringControllerTest {
             ResponseEntity<?> res = controller.getClassFeedback(classId, authFor(alice));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat((List<?>) res.getBody()).isEmpty();
+            verify(tutoringAuditFacade).feedbackViewed(alice, classId, 0);
         }
 
         @Test
@@ -440,6 +449,7 @@ class TutoringControllerTest {
             assertThat(payload.get("enrolled")).isEqualTo(false);
             assertThat(payload.get("enrolledCount")).isEqualTo(2L);
             verify(tutoringEnrollmentRepository).deleteByClassIdAndUserId(classId, alice.getId());
+            verify(tutoringAuditFacade).classLeft(alice, classId, 2L);
         }
 
         @Test

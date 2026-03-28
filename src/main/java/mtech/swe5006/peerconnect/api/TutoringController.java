@@ -8,7 +8,7 @@ import mtech.swe5006.peerconnect.data.sql.TutoringEnrollment;
 import mtech.swe5006.peerconnect.data.sql.TutoringEnrollmentRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
-import mtech.swe5006.peerconnect.service.AuditService;
+import mtech.swe5006.peerconnect.service.audit.TutoringAuditFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -33,20 +33,20 @@ public class TutoringController {
     private final UserRepository userRepository;
     private final PeerFeedbackRepository peerFeedbackRepository;
     private final JdbcTemplate jdbcTemplate;
-    private final AuditService auditService;
+    private final TutoringAuditFacade tutoringAuditFacade;
 
     public TutoringController(TutoringClassRepository tutoringClassRepository,
                               TutoringEnrollmentRepository tutoringEnrollmentRepository,
                               UserRepository userRepository,
                               PeerFeedbackRepository peerFeedbackRepository,
                               JdbcTemplate jdbcTemplate,
-                              AuditService auditService) {
+                              TutoringAuditFacade tutoringAuditFacade) {
         this.tutoringClassRepository = tutoringClassRepository;
         this.tutoringEnrollmentRepository = tutoringEnrollmentRepository;
         this.userRepository = userRepository;
         this.peerFeedbackRepository = peerFeedbackRepository;
         this.jdbcTemplate = jdbcTemplate;
-        this.auditService = auditService;
+        this.tutoringAuditFacade = tutoringAuditFacade;
     }
 
     @GetMapping("/classes")
@@ -98,6 +98,9 @@ public class TutoringController {
         tutoringClass.setMaxStudents(maxStudents);
         tutoringClass.setCreatedBy(currentUser.getId());
         tutoringClass.setTutorId(currentUser.getId());
+        if (tutoringClass.getId() == null) {
+            tutoringClass.setId(UUID.randomUUID());
+        }
 
         try {
             tutoringClassRepository.save(tutoringClass);
@@ -110,6 +113,7 @@ public class TutoringController {
                 return ResponseEntity.status(500).body(Map.of("error", "Failed to save tutoring class: " + fallbackEx.getMessage()));
             }
         }
+        tutoringAuditFacade.classCreated(currentUser, tutoringClass);
         return ResponseEntity.ok(buildClassPayload(tutoringClass, currentUser));
     }
 
@@ -131,6 +135,7 @@ public class TutoringController {
         peerFeedbackRepository.deleteByPeerTutorGroupId(id);
         tutoringEnrollmentRepository.deleteByClassId(id);
         tutoringClassRepository.delete(tutoringClass);
+        tutoringAuditFacade.classDeleted(currentUser, id);
         return ResponseEntity.ok(Map.of("deleted", true));
     }
 
@@ -163,6 +168,7 @@ public class TutoringController {
         enrollment.setClassId(id);
         enrollment.setUserId(currentUser.getId());
         tutoringEnrollmentRepository.save(enrollment);
+        tutoringAuditFacade.classEnrolled(currentUser, id, enrolledCount + 1);
 
         return ResponseEntity.ok(Map.of(
             "enrolled", true,
@@ -193,6 +199,7 @@ public class TutoringController {
         long currentCount = tutoringEnrollmentRepository.countByClassId(id);
         tutoringEnrollmentRepository.deleteByClassIdAndUserId(id, currentUser.getId());
         long remaining = Math.max(0, currentCount - 1);
+        tutoringAuditFacade.classLeft(currentUser, id, remaining);
         return ResponseEntity.ok(Map.of(
             "enrolled", false,
             "enrolledCount", remaining
@@ -271,18 +278,12 @@ public class TutoringController {
         feedback.setAnonymousToPeer(Boolean.parseBoolean(String.valueOf(body.get("anonymousToPeer"))));
 
         peerFeedbackRepository.save(feedback);
-        auditService.record(
-            "FEEDBACK_SUBMITTED",
-            reviewer.getId(),
-            reviewer.getEmail(),
-            "TUTORING_CLASS",
+        tutoringAuditFacade.feedbackSubmitted(
+            reviewer,
             id,
-            "SUCCESS",
-            null,
-            null,
-            Map.of(
-                "revieweeId", revieweeId.toString(),
-                "anonymousToPeer", Boolean.TRUE.equals(feedback.getAnonymousToPeer())));
+            revieweeId,
+            Boolean.TRUE.equals(feedback.getAnonymousToPeer())
+        );
         return ResponseEntity.ok(buildFeedbackResponse(id, id, revieweeId, reviewee, feedback));
     }
 
@@ -329,6 +330,7 @@ public class TutoringController {
             })
             .toList();
 
+        tutoringAuditFacade.feedbackViewed(currentUser, id, payload.size());
         return ResponseEntity.ok(payload);
     }
 
