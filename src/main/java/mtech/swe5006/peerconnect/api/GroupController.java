@@ -1,5 +1,35 @@
 package mtech.swe5006.peerconnect.api;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
 import mtech.swe5006.peerconnect.data.sql.StudyGroup;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMember;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMemberRepository;
@@ -8,27 +38,7 @@ import mtech.swe5006.peerconnect.data.sql.StudySession;
 import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
-import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
 import mtech.swe5006.peerconnect.service.EmailService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.Locale;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/groups")
@@ -65,20 +75,57 @@ public class GroupController {
         User currentUser = getCurrentUser(auth);
         List<StudyGroup> groups = groupRepository.findByStatusInOrderByCreatedAtDesc(List.of("active", "full"));
 
-        // Filter out groups whose owner has restricted the current user
+        // Batch-load all blocker IDs for the current user in ONE query, then filter in memory
         if (currentUser != null) {
             UUID uid = currentUser.getId();
-            int before = groups.size();
-            groups = groups.stream()
-                .filter(g -> g.getCreatedBy() == null
-                    || !restrictedUserRepository.existsByBlockerIdAndBlockedId(g.getCreatedBy(), uid))
-                .toList();
-            if (groups.size() < before) {
-                log.info("[AllGroups] Filtered {} restricted groups for user {}", before - groups.size(), uid);
+            Set<UUID> blockerIds = restrictedUserRepository.findByBlockedId(uid)
+                .stream().map(r -> r.getBlockerId()).collect(Collectors.toSet());
+            if (!blockerIds.isEmpty()) {
+                int before = groups.size();
+                groups = groups.stream()
+                    .filter(g -> g.getCreatedBy() == null || !blockerIds.contains(g.getCreatedBy()))
+                    .toList();
+                if (groups.size() < before) {
+                    log.info("[AllGroups] Filtered {} restricted groups for user {}", before - groups.size(), uid);
+                }
             }
         }
 
-        List<Map<String, Object>> payload = groups.stream().map(group -> buildGroupSummary(group, currentUser)).toList();
+        List<UUID> groupIds = groups.stream().map(StudyGroup::getId).toList();
+
+        // Batch-load ALL members for all groups in ONE query
+        List<StudyGroupMember> allMembers = groupIds.isEmpty()
+            ? List.of()
+            : groupMemberRepository.findByGroupIdIn(groupIds);
+
+        // Aggregate counts and current-user memberships from the batch, no DB calls
+        Map<UUID, Long> approvedCounts = new HashMap<>();
+        Map<UUID, Long> pendingCounts = new HashMap<>();
+        Map<UUID, StudyGroupMember> currentUserMemberships = new HashMap<>();
+        UUID currentUserId = currentUser != null ? currentUser.getId() : null;
+        for (StudyGroupMember m : allMembers) {
+            UUID gid = m.getGroupId();
+            if ("approved".equalsIgnoreCase(m.getMembershipStatus())) {
+                approvedCounts.merge(gid, 1L, Long::sum);
+            } else if ("pending".equalsIgnoreCase(m.getMembershipStatus())) {
+                pendingCounts.merge(gid, 1L, Long::sum);
+            }
+            if (currentUserId != null && currentUserId.equals(m.getUserId())) {
+                currentUserMemberships.put(gid, m);
+            }
+        }
+
+        // Batch-load all distinct group owners in ONE query
+        Set<UUID> ownerIds = groups.stream()
+            .filter(g -> g.getCreatedBy() != null)
+            .map(StudyGroup::getCreatedBy)
+            .collect(Collectors.toSet());
+        Map<UUID, User> ownerMap = userRepository.findAllById(ownerIds).stream()
+            .collect(Collectors.toMap(User::getId, u -> u));
+
+        List<Map<String, Object>> payload = groups.stream()
+            .map(g -> buildGroupSummaryBatched(g, currentUser, approvedCounts, pendingCounts, currentUserMemberships, ownerMap))
+            .toList();
         return ResponseEntity.ok(payload);
     }
 
@@ -207,6 +254,8 @@ public class GroupController {
         try {
             String schedule = formatSchedule(group.getPreferredSchedule());
             String[] memberEmails = getApprovedMemberEmails(group.getId());
+            String ownerName = resolveOwnerName(group);
+            String ownerEmail = resolveOwnerEmail(group);
             if (memberEmails.length > 0) {
                 emailService.sendGroupUpdated(
                     memberEmails,
@@ -214,8 +263,24 @@ public class GroupController {
                     group.getModuleCode() != null ? group.getModuleCode() : "",
                     group.getTopic() != null ? group.getTopic() : "",
                     schedule,
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
+                    group.getLocation(),
+                    group.getMeetingLink(),
+                    group.getDescription(),
+                    ownerName,
+                    ownerEmail
+                );
+            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
+                emailService.sendGroupUpdated(
+                    new String[]{ownerEmail},
+                    group.getName() != null ? group.getName() : "",
+                    group.getModuleCode() != null ? group.getModuleCode() : "",
+                    group.getTopic() != null ? group.getTopic() : "",
+                    schedule,
+                    group.getLocation(),
+                    group.getMeetingLink(),
+                    group.getDescription(),
+                    ownerName,
+                    null
                 );
             }
         } catch (Exception emailEx) {
@@ -278,6 +343,26 @@ public class GroupController {
         long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
         refreshGroupStatus(group);
         groupRepository.save(group);
+
+        // Send join notification email (TO: owner, CC: user)
+        try {
+            String ownerEmail = resolveOwnerEmail(group);
+            String ownerName = resolveOwnerName(group);
+            String userName = (user.getFirstName() + " " + user.getLastName()).trim();
+            String schedule = formatSchedule(group.getPreferredSchedule());
+            emailService.sendUserJoinedGroup(
+                ownerEmail,
+                user.getEmail(),
+                userName,
+                group.getName() != null ? group.getName() : "",
+                group.getModuleCode() != null ? group.getModuleCode() : "",
+                group.getTopic() != null ? group.getTopic() : "",
+                schedule
+            );
+        } catch (Exception emailEx) {
+            log.warn("[JoinGroup] Failed to send join notification: {}", emailEx.getMessage());
+        }
+
         return ResponseEntity.ok(Map.of(
             "joined", "approved".equalsIgnoreCase(membership.getMembershipStatus()),
             "alreadyJoined", false,
@@ -318,6 +403,25 @@ public class GroupController {
         long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
         refreshGroupStatus(group);
         groupRepository.save(group);
+
+        // Send leave notification email (TO: owner, CC: user)
+        try {
+            String ownerEmail = resolveOwnerEmail(group);
+            String ownerName = resolveOwnerName(group);
+            String userName = (user.getFirstName() + " " + user.getLastName()).trim();
+            String schedule = formatSchedule(group.getPreferredSchedule());
+            emailService.sendUserLeftGroup(
+                ownerEmail,
+                user.getEmail(),
+                userName,
+                group.getName() != null ? group.getName() : "",
+                group.getModuleCode() != null ? group.getModuleCode() : "",
+                group.getTopic() != null ? group.getTopic() : "",
+                schedule
+            );
+        } catch (Exception emailEx) {
+            log.warn("[LeaveGroup] Failed to send leave notification: {}", emailEx.getMessage());
+        }
 
         return ResponseEntity.ok(Map.of(
             "left", true,
@@ -587,6 +691,8 @@ public class GroupController {
                 .filter(e -> e != null && !e.isBlank())
                 .toList();
 
+            String ownerName = resolveOwnerName(group);
+            String ownerEmail = resolveOwnerEmail(group);
             if (!memberEmails.isEmpty()) {
                 emailService.sendGroupDissolved(
                     memberEmails.toArray(new String[0]),
@@ -594,8 +700,18 @@ public class GroupController {
                     group.getModuleCode() != null ? group.getModuleCode() : "",
                     group.getTopic() != null ? group.getTopic() : "",
                     schedule,
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
+                    ownerName,
+                    ownerEmail
+                );
+            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
+                emailService.sendGroupDissolved(
+                    new String[]{ownerEmail},
+                    group.getName() != null ? group.getName() : "",
+                    group.getModuleCode() != null ? group.getModuleCode() : "",
+                    group.getTopic() != null ? group.getTopic() : "",
+                    schedule,
+                    ownerName,
+                    null
                 );
             }
         } catch (Exception emailEx) {
@@ -682,6 +798,8 @@ public class GroupController {
         // Send session-created email notification to approved members with role "member"
         try {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
+            String ownerName = resolveOwnerName(group);
+            String ownerEmail = resolveOwnerEmail(group);
             if (memberEmails.length > 0) {
                 emailService.sendSessionCreated(
                     memberEmails,
@@ -691,8 +809,20 @@ public class GroupController {
                     session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
                     session.getLocation(),
                     session.getMeetingLink(),
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
+                    ownerName,
+                    ownerEmail
+                );
+            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
+                emailService.sendSessionCreated(
+                    new String[]{ownerEmail},
+                    group.getName() != null ? group.getName() : "",
+                    session.getTitle(),
+                    formatSchedule(session.getStartsAt()),
+                    session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
+                    session.getLocation(),
+                    session.getMeetingLink(),
+                    ownerName,
+                    null
                 );
             }
         } catch (Exception emailEx) {
@@ -737,6 +867,8 @@ public class GroupController {
         // Send session-updated email notification to approved members with role "member"
         try {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
+            String ownerName = resolveOwnerName(group);
+            String ownerEmail = resolveOwnerEmail(group);
             if (memberEmails.length > 0) {
                 emailService.sendSessionUpdated(
                     memberEmails,
@@ -746,8 +878,20 @@ public class GroupController {
                     session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
                     session.getLocation(),
                     session.getMeetingLink(),
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
+                    ownerName,
+                    ownerEmail
+                );
+            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
+                emailService.sendSessionUpdated(
+                    new String[]{ownerEmail},
+                    group.getName() != null ? group.getName() : "",
+                    session.getTitle(),
+                    formatSchedule(session.getStartsAt()),
+                    session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
+                    session.getLocation(),
+                    session.getMeetingLink(),
+                    ownerName,
+                    null
                 );
             }
         } catch (Exception emailEx) {
@@ -778,14 +922,25 @@ public class GroupController {
         // Send session-deleted email notification to approved members with role "member"
         try {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
+            String ownerName = resolveOwnerName(group);
+            String ownerEmail = resolveOwnerEmail(group);
             if (memberEmails.length > 0) {
                 emailService.sendSessionDeleted(
                     memberEmails,
                     group.getName() != null ? group.getName() : "",
                     deletedTitle,
                     deletedStartsAt,
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
+                    ownerName,
+                    ownerEmail
+                );
+            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
+                emailService.sendSessionDeleted(
+                    new String[]{ownerEmail},
+                    group.getName() != null ? group.getName() : "",
+                    deletedTitle,
+                    deletedStartsAt,
+                    ownerName,
+                    null
                 );
             }
         } catch (Exception emailEx) {
@@ -962,8 +1117,6 @@ public class GroupController {
         row.put("id", group.getId());
         row.put("name", firstNonBlank(group.getName(), group.getTopic(), "Study Group"));
         row.put("moduleCode", firstNonBlank(group.getModuleCode(), group.getTopic(), "General"));
-        row.put("courseId", group.getCourseId() != null ? group.getCourseId().toString() : null);
-        row.put("courseCode", firstNonBlank(group.getModuleCode(), group.getTopic(), "General"));
         row.put("topic", group.getTopic());
         row.put("description", group.getDescription());
         row.put("studyMode", group.getStudyMode());
@@ -989,6 +1142,55 @@ public class GroupController {
         details.put("members", getMembersPayload(group.getId()));
         details.put("sessions", getSessionsPayload(group.getId()));
         return details;
+    }
+
+    /** Zero-DB version of buildGroupSummary — uses pre-loaded batch maps from getAllGroups. */
+    private Map<String, Object> buildGroupSummaryBatched(StudyGroup group, User currentUser,
+                                                          Map<UUID, Long> approvedCounts,
+                                                          Map<UUID, Long> pendingCounts,
+                                                          Map<UUID, StudyGroupMember> currentUserMemberships,
+                                                          Map<UUID, User> ownerMap) {
+        UUID gid = group.getId();
+        long approvedCount = approvedCounts.getOrDefault(gid, 0L);
+        long pendingCount = pendingCounts.getOrDefault(gid, 0L);
+        StudyGroupMember currentMembership = currentUserMemberships.get(gid);
+        User owner = group.getCreatedBy() != null ? ownerMap.get(group.getCreatedBy()) : null;
+
+        boolean admin = false;
+        if (currentUser != null) {
+            UUID uid = currentUser.getId();
+            if (isOwner(group, uid)) {
+                admin = true;
+            } else if (currentMembership != null
+                    && "approved".equalsIgnoreCase(currentMembership.getMembershipStatus())
+                    && ("owner".equalsIgnoreCase(currentMembership.getRole())
+                        || "admin".equalsIgnoreCase(currentMembership.getRole()))) {
+                admin = true;
+            }
+        }
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", group.getId());
+        row.put("name", firstNonBlank(group.getName(), group.getTopic(), "Study Group"));
+        row.put("moduleCode", firstNonBlank(group.getModuleCode(), group.getTopic(), "General"));
+        row.put("topic", group.getTopic());
+        row.put("description", group.getDescription());
+        row.put("studyMode", group.getStudyMode());
+        row.put("location", group.getLocation());
+        row.put("meetingLink", group.getMeetingLink());
+        row.put("preferredSchedule", group.getPreferredSchedule());
+        row.put("createdBy", group.getCreatedBy());
+        row.put("ownerName", owner == null ? null : (owner.getFirstName() + " " + owner.getLastName()).trim());
+        row.put("maxMembers", group.getMaxMembers());
+        row.put("status", group.getStatus());
+        row.put("approvalRequired", Boolean.TRUE.equals(group.getApprovalRequired()));
+        row.put("createdAt", group.getCreatedAt());
+        row.put("memberCount", approvedCount);
+        row.put("pendingCount", pendingCount);
+        row.put("joined", currentMembership != null && "approved".equalsIgnoreCase(currentMembership.getMembershipStatus()));
+        row.put("membershipStatus", currentMembership != null ? currentMembership.getMembershipStatus() : null);
+        row.put("isAdmin", admin);
+        return row;
     }
 
     private List<Map<String, Object>> getSessionsPayload(UUID groupId) {
@@ -1084,15 +1286,14 @@ public class GroupController {
         jdbcTemplate.update(
             """
             INSERT INTO study_groups
-                (id, topic, name, module_code, course_id, description, meeting_link, preferred_schedule,
+                (id, topic, name, module_code, description, meeting_link, preferred_schedule,
                  study_mode, location, created_by, max_members, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             group.getId().toString(),
             group.getTopic(),
             group.getName(),
             group.getModuleCode(),
-            group.getCourseId() != null ? group.getCourseId().toString() : null,
             group.getDescription(),
             group.getMeetingLink(),
             preferredSchedule,

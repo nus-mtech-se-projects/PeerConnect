@@ -1,14 +1,20 @@
+
+
 package mtech.swe5006.peerconnect.service;
 
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 @Service
 public class EmailService {
-
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
     private static final String FROM_ADDRESS = "peerconnectsg@gmail.com";
-
+    private static final Set<String> BLOCKED_DOMAINS = Set.of("example.com", "test.com"); // Add your blocked domains here
     private final JavaMailSender mailSender;
 
     public EmailService(JavaMailSender mailSender) {
@@ -16,9 +22,70 @@ public class EmailService {
     }
 
     /**
+     * Notify owner when a user joins a group.
+     */
+    public void sendUserJoinedGroup(String ownerEmail, String userEmail, String userName, String groupName, String moduleSubject, String topic, String preferredSchedule) {
+        if (isBlockedEmail(ownerEmail)) { log.info("Skipping email to blocked address: {}", ownerEmail); return; }
+        SimpleMailMessage msg = new SimpleMailMessage();
+        msg.setFrom(FROM_ADDRESS);
+        msg.setTo(ownerEmail);
+        if (userEmail != null && !userEmail.isBlank()) {
+            msg.setCc(userEmail);
+        }
+        msg.setSubject("[PeerConnectSG] User Joined Group: " + groupName);
+        msg.setText(
+            "Dear Group Owner,\n\n"
+            + userName + " has joined your study group:\n\n"
+            + "    Group Name:       " + groupName + "\n"
+            + "    Module / Subject: " + moduleSubject + "\n"
+            + "    Topic:            " + topic + "\n"
+            + "    Scheduled At:     " + preferredSchedule + "\n\n"
+            + "This is a notification for your records.\n\n"
+            + "---\n"
+            + "This is a system-generated email. Please do not reply."
+        );
+        mailSender.send(msg);
+    }
+
+    /**
+     * Notify owner when a user leaves a group.
+     */
+    public void sendUserLeftGroup(String ownerEmail, String userEmail, String userName, String groupName, String moduleSubject, String topic, String preferredSchedule) {
+        if (isBlockedEmail(ownerEmail)) { log.info("Skipping email to blocked address: {}", ownerEmail); return; }
+        SimpleMailMessage msg = new SimpleMailMessage();
+        msg.setFrom(FROM_ADDRESS);
+        msg.setTo(ownerEmail);
+        if (userEmail != null && !userEmail.isBlank()) {
+            msg.setCc(userEmail);
+        }
+        msg.setSubject("[PeerConnectSG] User Left Group: " + groupName);
+        msg.setText(
+            "Dear Group Owner,\n\n"
+            + userName + " has left your study group:\n\n"
+            + "    Group Name:       " + groupName + "\n"
+            + "    Module / Subject: " + moduleSubject + "\n"
+            + "    Topic:            " + topic + "\n"
+            + "    Scheduled At:     " + preferredSchedule + "\n\n"
+            + "This is a notification for your records.\n\n"
+            + "---\n"
+            + "This is a system-generated email. Please do not reply."
+        );
+        mailSender.send(msg);
+    }
+
+    /**
+     * Checks if the given email is in a blocked domain.
+     */
+    private boolean isBlockedEmail(String email) {
+        String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
+        return BLOCKED_DOMAINS.contains(domain);
+    }
+
+    /**
      * Send a password-reset verification code to the user's email.
      */
     public void sendResetCode(String toEmail, String code) {
+        if (isBlockedEmail(toEmail)) { log.info("Skipping email to blocked address: {}", toEmail); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(toEmail);
@@ -38,6 +105,7 @@ public class EmailService {
      * Send a change-password verification code to the user's email.
      */
     public void sendChangePasswordCode(String toEmail, String code) {
+        if (isBlockedEmail(toEmail)) { log.info("Skipping email to blocked address: {}", toEmail); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(toEmail);
@@ -61,6 +129,7 @@ public class EmailService {
                                      String groupName, String moduleSubject,
                                      String topic, String preferredSchedule,
                                      String ownerName, String ownerEmail) {
+        if (isBlockedEmail(inviteeEmail)) { log.info("Skipping email to blocked address: {}", inviteeEmail); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(inviteeEmail);
@@ -92,6 +161,8 @@ public class EmailService {
                                     String moduleSubject, String topic,
                                     String preferredSchedule,
                                     String ownerName, String ownerEmail) {
+        memberEmails = java.util.Arrays.stream(memberEmails).filter(e -> !isBlockedEmail(e)).toArray(String[]::new);
+        if (memberEmails.length == 0) { log.info("Skipping group-dissolved email — all recipients blocked"); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(memberEmails);
@@ -125,6 +196,7 @@ public class EmailService {
                                     String groupName, String moduleSubject,
                                     String topic, String preferredSchedule,
                                     String ownerName, String ownerEmail) {
+        if (isBlockedEmail(memberEmail)) { log.info("Skipping email to blocked address: {}", memberEmail); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(memberEmail);
@@ -157,6 +229,7 @@ public class EmailService {
                                     String groupName, String moduleSubject,
                                     String topic, String preferredSchedule,
                                     String ownerName, String ownerEmail) {
+        if (isBlockedEmail(memberEmail)) { log.info("Skipping email to blocked address: {}", memberEmail); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(memberEmail);
@@ -188,7 +261,11 @@ public class EmailService {
     public void sendGroupUpdated(String[] memberEmails, String groupName,
                                   String moduleSubject, String topic,
                                   String preferredSchedule,
+                                  String location, String meetingLink,
+                                  String description,
                                   String ownerName, String ownerEmail) {
+        memberEmails = java.util.Arrays.stream(memberEmails).filter(e -> !isBlockedEmail(e)).toArray(String[]::new);
+        if (memberEmails.length == 0) { log.info("Skipping group-updated email — all recipients blocked"); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(memberEmails);
@@ -202,7 +279,10 @@ public class EmailService {
             + "    Group Name:       " + groupName + "\n"
             + "    Module / Subject: " + moduleSubject + "\n"
             + "    Topic:            " + topic + "\n"
-            + "    Scheduled At:     " + preferredSchedule + "\n\n"
+            + "    Scheduled At:     " + preferredSchedule + "\n"
+            + "    Location:         " + (location != null && !location.isBlank() ? location : "N/A") + "\n"
+            + "    Meeting Link:     " + (meetingLink != null && !meetingLink.isBlank() ? meetingLink : "N/A") + "\n"
+            + "    Description:      " + (description != null && !description.isBlank() ? description : "N/A") + "\n\n"
             + "Please log in to PeerConnectSG to view the full updated details.\n\n"
             + "Regards,\n"
             + ownerName + "\n"
@@ -221,6 +301,8 @@ public class EmailService {
                                     String endsAt, String location,
                                     String meetingLink,
                                     String ownerName, String ownerEmail) {
+        memberEmails = java.util.Arrays.stream(memberEmails).filter(e -> !isBlockedEmail(e)).toArray(String[]::new);
+        if (memberEmails.length == 0) { log.info("Skipping session-created email — all recipients blocked"); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(memberEmails);
@@ -254,6 +336,8 @@ public class EmailService {
                                     String endsAt, String location,
                                     String meetingLink,
                                     String ownerName, String ownerEmail) {
+        memberEmails = java.util.Arrays.stream(memberEmails).filter(e -> !isBlockedEmail(e)).toArray(String[]::new);
+        if (memberEmails.length == 0) { log.info("Skipping session-updated email — all recipients blocked"); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(memberEmails);
@@ -286,6 +370,8 @@ public class EmailService {
     public void sendSessionDeleted(String[] memberEmails, String groupName,
                                     String sessionTitle, String startsAt,
                                     String ownerName, String ownerEmail) {
+        memberEmails = java.util.Arrays.stream(memberEmails).filter(e -> !isBlockedEmail(e)).toArray(String[]::new);
+        if (memberEmails.length == 0) { log.info("Skipping session-deleted email — all recipients blocked"); return; }
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM_ADDRESS);
         msg.setTo(memberEmails);
@@ -308,4 +394,6 @@ public class EmailService {
         );
         mailSender.send(msg);
     }
+
 }
+

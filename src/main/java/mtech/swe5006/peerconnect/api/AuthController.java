@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -29,6 +30,10 @@ public class AuthController {
   private final EmailService emailService;
   
   private static final SecureRandom RANDOM = new SecureRandom();
+
+  /** Rate-limit: track last email-send time per user email (2-minute cooldown). */
+  private static final ConcurrentHashMap<String, LocalDateTime> emailCooldowns = new ConcurrentHashMap<>();
+  private static final long EMAIL_COOLDOWN_SECONDS = 120;
 
   public AuthController(UserRepository userRepository,
       PasswordEncoder passwordEncoder,
@@ -185,9 +190,16 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
           "Account does not exist. Please verify the email or NUS Student ID.");
     }
 
+    // Rate-limit: max 1 email per 2 minutes per user
+    LocalDateTime lastSent = emailCooldowns.get(user.getEmail());
+    if (lastSent != null && lastSent.plusSeconds(EMAIL_COOLDOWN_SECONDS).isAfter(LocalDateTime.now())) {
+      return ResponseEntity.status(429).body(Map.of("error", "Please wait before requesting another code."));
+    }
+
     String code = generateAndStoreVerificationCode(user);
     try {
       emailService.sendResetCode(user.getEmail(), code);
+      emailCooldowns.put(user.getEmail(), LocalDateTime.now());
     } catch (Exception e) {
       log.error("[ForgotPassword] Failed to send reset code to {}: {}", user.getEmail(), e.getMessage());
     }
@@ -232,9 +244,16 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
       return ResponseEntity.badRequest().body("User not found.");
     }
 
+    // Rate-limit: max 1 email per 2 minutes per user
+    LocalDateTime lastSent = emailCooldowns.get(user.getEmail());
+    if (lastSent != null && lastSent.plusSeconds(EMAIL_COOLDOWN_SECONDS).isAfter(LocalDateTime.now())) {
+      return ResponseEntity.status(429).body(Map.of("error", "Please wait before requesting another code."));
+    }
+
     String code = generateAndStoreVerificationCode(user);
     try {
       emailService.sendChangePasswordCode(user.getEmail(), code);
+      emailCooldowns.put(user.getEmail(), LocalDateTime.now());
     } catch (Exception e) {
       log.error("[ChangePasswordRequest] Failed to send code to {}: {}", user.getEmail(), e.getMessage());
     }

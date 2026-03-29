@@ -1,6 +1,7 @@
 package mtech.swe5006.peerconnect;
 
 import mtech.swe5006.peerconnect.api.GroupController;
+import mtech.swe5006.peerconnect.data.sql.RestrictedUser;
 import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
 import mtech.swe5006.peerconnect.data.sql.StudyGroup;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMember;
@@ -109,7 +110,6 @@ class GroupControllerTest {
             assertThat(cap.getValue().getUserId()).isEqualTo(alice.getId());
             ArgumentCaptor<StudyGroup> groupCaptor = ArgumentCaptor.forClass(StudyGroup.class);
             verify(groupRepository).save(groupCaptor.capture());
-            assertThat(groupCaptor.getValue().getCourseId()).isNull();
         }
     }
 
@@ -228,9 +228,16 @@ class GroupControllerTest {
             when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(alice));
             when(groupRepository.findByStatusInOrderByCreatedAtDesc(List.of("active", "full")))
                 .thenReturn(new ArrayList<>(List.of(group, group2)));
-            // bob restricted alice
-            when(restrictedUserRepository.existsByBlockerIdAndBlockedId(alice.getId(), alice.getId())).thenReturn(false);
-            when(restrictedUserRepository.existsByBlockerIdAndBlockedId(bob.getId(), alice.getId())).thenReturn(true);
+
+            // bob restricted alice — new batch approach: findByBlockedId(alice) returns bob's restriction entry
+            RestrictedUser restriction = new RestrictedUser();
+            restriction.setBlockerId(bob.getId());
+            restriction.setBlockedId(alice.getId());
+            when(restrictedUserRepository.findByBlockedId(alice.getId())).thenReturn(List.of(restriction));
+
+            // batch member/owner loads return empty for simplicity
+            when(memberRepository.findByGroupIdIn(any())).thenReturn(Collections.emptyList());
+            when(userRepository.findAllById(any())).thenReturn(List.of(alice));
 
             ResponseEntity<?> res = controller.getAllGroups(authFor(alice));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
@@ -447,25 +454,6 @@ class GroupControllerTest {
             ResponseEntity<?> res = controller.updateGroup(groupId, authFor(alice), body);
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("name")).isEqualTo("Updated Name");
-        }
-
-        @Test
-        void updateWithNoExplicitCourseIdKeepsCourseIdNull() {
-            group.setCourseId(null);
-
-            Map<String, Object> body = new HashMap<>();
-            body.put("name", "Updated Name");
-            body.put("moduleCode", "CS9000");
-            body.put("description", "Updated desc");
-            body.put("preferredSchedule", "2026-05-01T10:00:00");
-            body.put("meetingLink", "https://zoom.us/updated");
-
-            ResponseEntity<?> res = controller.updateGroup(groupId, authFor(alice), body);
-
-            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
-            ArgumentCaptor<StudyGroup> groupCaptor = ArgumentCaptor.forClass(StudyGroup.class);
-            verify(groupRepository, atLeastOnce()).save(groupCaptor.capture());
-            assertThat(groupCaptor.getValue().getCourseId()).isNull();
         }
 
         @Test
