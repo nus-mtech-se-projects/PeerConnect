@@ -1110,9 +1110,15 @@ public class GroupController {
         StudyGroupMember currentMembership = currentUser == null
             ? null
             : groupMemberRepository.findByGroupIdAndUserId(group.getId(), currentUser.getId()).orElse(null);
-
         User owner = group.getCreatedBy() == null ? null : userRepository.findById(group.getCreatedBy()).orElse(null);
+        return buildGroupRow(group, owner, approvedCount, pendingCount, currentMembership,
+            currentUser != null && isAdmin(group, currentUser.getId()));
+    }
 
+    /** Builds the standard group summary map from pre-resolved values (no additional DB calls). */
+    private Map<String, Object> buildGroupRow(StudyGroup group, User owner,
+                                               long approvedCount, long pendingCount,
+                                               StudyGroupMember currentMembership, boolean isAdmin) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", group.getId());
         row.put("name", firstNonBlank(group.getName(), group.getTopic(), "Study Group"));
@@ -1124,7 +1130,7 @@ public class GroupController {
         row.put("meetingLink", group.getMeetingLink());
         row.put("preferredSchedule", group.getPreferredSchedule());
         row.put("createdBy", group.getCreatedBy());
-        row.put("ownerName", owner == null ? null : ((owner.getFirstName() + " " + owner.getLastName()).trim()));
+        row.put("ownerName", owner == null ? null : (owner.getFirstName() + " " + owner.getLastName()).trim());
         row.put("maxMembers", group.getMaxMembers());
         row.put("status", group.getStatus());
         row.put("approvalRequired", Boolean.TRUE.equals(group.getApprovalRequired()));
@@ -1133,7 +1139,7 @@ public class GroupController {
         row.put("pendingCount", pendingCount);
         row.put("joined", currentMembership != null && "approved".equalsIgnoreCase(currentMembership.getMembershipStatus()));
         row.put("membershipStatus", currentMembership != null ? currentMembership.getMembershipStatus() : null);
-        row.put("isAdmin", currentUser != null && isAdmin(group, currentUser.getId()));
+        row.put("isAdmin", isAdmin);
         return row;
     }
 
@@ -1169,28 +1175,7 @@ public class GroupController {
             }
         }
 
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("id", group.getId());
-        row.put("name", firstNonBlank(group.getName(), group.getTopic(), "Study Group"));
-        row.put("moduleCode", firstNonBlank(group.getModuleCode(), group.getTopic(), "General"));
-        row.put("topic", group.getTopic());
-        row.put("description", group.getDescription());
-        row.put("studyMode", group.getStudyMode());
-        row.put("location", group.getLocation());
-        row.put("meetingLink", group.getMeetingLink());
-        row.put("preferredSchedule", group.getPreferredSchedule());
-        row.put("createdBy", group.getCreatedBy());
-        row.put("ownerName", owner == null ? null : (owner.getFirstName() + " " + owner.getLastName()).trim());
-        row.put("maxMembers", group.getMaxMembers());
-        row.put("status", group.getStatus());
-        row.put("approvalRequired", Boolean.TRUE.equals(group.getApprovalRequired()));
-        row.put("createdAt", group.getCreatedAt());
-        row.put("memberCount", approvedCount);
-        row.put("pendingCount", pendingCount);
-        row.put("joined", currentMembership != null && "approved".equalsIgnoreCase(currentMembership.getMembershipStatus()));
-        row.put("membershipStatus", currentMembership != null ? currentMembership.getMembershipStatus() : null);
-        row.put("isAdmin", admin);
-        return row;
+        return buildGroupRow(group, owner, approvedCount, pendingCount, currentMembership, admin);
     }
 
     private List<Map<String, Object>> getSessionsPayload(UUID groupId) {
