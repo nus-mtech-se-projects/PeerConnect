@@ -26,6 +26,7 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
+import java.lang.reflect.Field;
 import java.util.Date;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -75,6 +76,19 @@ class AuthControllerTest {
         savedUser.setPasswordHash("hashed-pw");
         savedUser.setUserType("student");
         savedUser.setStatus("active");
+
+        clearEmailCooldowns();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void clearEmailCooldowns() {
+        try {
+            Field field = AuthController.class.getDeclaredField("emailCooldowns");
+            field.setAccessible(true);
+            ((Map<String, LocalDateTime>) field.get(null)).clear();
+        } catch (ReflectiveOperationException ex) {
+            throw new RuntimeException("Failed to clear AuthController email cooldowns for tests", ex);
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════
