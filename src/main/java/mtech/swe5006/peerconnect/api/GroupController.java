@@ -29,6 +29,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import static mtech.swe5006.peerconnect.api.ControllerUtils.asBoolean;
+import static mtech.swe5006.peerconnect.api.ControllerUtils.asShort;
+import static mtech.swe5006.peerconnect.api.ControllerUtils.asString;
+import static mtech.swe5006.peerconnect.api.ControllerUtils.firstNonBlank;
 import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
 import mtech.swe5006.peerconnect.data.sql.StudyGroup;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMember;
@@ -797,34 +801,7 @@ public class GroupController {
 
         // Send session-created email notification to approved members with role "member"
         try {
-            String[] memberEmails = getApprovedMemberEmails(group.getId());
-            String ownerName = resolveOwnerName(group);
-            String ownerEmail = resolveOwnerEmail(group);
-            if (memberEmails.length > 0) {
-                emailService.sendSessionCreated(
-                    memberEmails,
-                    group.getName() != null ? group.getName() : "",
-                    session.getTitle(),
-                    formatSchedule(session.getStartsAt()),
-                    session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
-                    session.getLocation(),
-                    session.getMeetingLink(),
-                    ownerName,
-                    ownerEmail
-                );
-            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
-                emailService.sendSessionCreated(
-                    new String[]{ownerEmail},
-                    group.getName() != null ? group.getName() : "",
-                    session.getTitle(),
-                    formatSchedule(session.getStartsAt()),
-                    session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
-                    session.getLocation(),
-                    session.getMeetingLink(),
-                    ownerName,
-                    null
-                );
-            }
+            dispatchSessionEmail(group, session, emailService::sendSessionCreated);
         } catch (Exception emailEx) {
             log.warn("[CreateSession] Failed to send session-created emails for group {}: {}", id, emailEx.getMessage());
         }
@@ -866,34 +843,7 @@ public class GroupController {
 
         // Send session-updated email notification to approved members with role "member"
         try {
-            String[] memberEmails = getApprovedMemberEmails(group.getId());
-            String ownerName = resolveOwnerName(group);
-            String ownerEmail = resolveOwnerEmail(group);
-            if (memberEmails.length > 0) {
-                emailService.sendSessionUpdated(
-                    memberEmails,
-                    group.getName() != null ? group.getName() : "",
-                    session.getTitle(),
-                    formatSchedule(session.getStartsAt()),
-                    session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
-                    session.getLocation(),
-                    session.getMeetingLink(),
-                    ownerName,
-                    ownerEmail
-                );
-            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
-                emailService.sendSessionUpdated(
-                    new String[]{ownerEmail},
-                    group.getName() != null ? group.getName() : "",
-                    session.getTitle(),
-                    formatSchedule(session.getStartsAt()),
-                    session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null,
-                    session.getLocation(),
-                    session.getMeetingLink(),
-                    ownerName,
-                    null
-                );
-            }
+            dispatchSessionEmail(group, session, emailService::sendSessionUpdated);
         } catch (Exception emailEx) {
             log.warn("[UpdateSession] Failed to send session-updated emails for session {} in group {}: {}", sessionId, id, emailEx.getMessage());
         }
@@ -1057,6 +1007,30 @@ public class GroupController {
             .toArray(String[]::new);
     }
 
+    @FunctionalInterface
+    private interface SessionEmailFn {
+        void send(String[] recipients, String groupName, String sessionTitle,
+                  String startsAt, String endsAt, String location, String meetingLink,
+                  String ownerName, String cc);
+    }
+
+    private void dispatchSessionEmail(StudyGroup group, StudySession session, SessionEmailFn fn) {
+        String[] memberEmails = getApprovedMemberEmails(group.getId());
+        String ownerName = resolveOwnerName(group);
+        String ownerEmail = resolveOwnerEmail(group);
+        String groupName = group.getName() != null ? group.getName() : "";
+        String endsAt = session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null;
+        if (memberEmails.length > 0) {
+            fn.send(memberEmails, groupName, session.getTitle(),
+                formatSchedule(session.getStartsAt()), endsAt,
+                session.getLocation(), session.getMeetingLink(), ownerName, ownerEmail);
+        } else if (ownerEmail != null && !ownerEmail.isBlank()) {
+            fn.send(new String[]{ownerEmail}, groupName, session.getTitle(),
+                formatSchedule(session.getStartsAt()), endsAt,
+                session.getLocation(), session.getMeetingLink(), ownerName, null);
+        }
+    }
+
     /**
      * Format a LocalDateTime as "DD-MON-YYYY at HH:mm" (e.g. "20-JAN-2025 at 15:30").
      */
@@ -1212,28 +1186,6 @@ public class GroupController {
         return payload;
     }
 
-    private String asString(Object value) {
-        if (value == null) return null;
-        String s = String.valueOf(value).trim();
-        return s.isEmpty() ? null : s;
-    }
-
-    private Short asShort(Object value, Short defaultValue) {
-        if (value == null) return defaultValue;
-        if (value instanceof Number n) return n.shortValue();
-        try {
-            return Short.parseShort(String.valueOf(value));
-        } catch (Exception ex) {
-            return defaultValue;
-        }
-    }
-
-    private boolean asBoolean(Object value, boolean defaultValue) {
-        if (value == null) return defaultValue;
-        if (value instanceof Boolean b) return b;
-        return "true".equalsIgnoreCase(String.valueOf(value));
-    }
-
     private UUID parseUuid(String value) {
         if (value == null || value.isBlank()) return null;
         try {
@@ -1254,13 +1206,6 @@ public class GroupController {
                 return null;
             }
         }
-    }
-
-    private String firstNonBlank(String... candidates) {
-        for (String c : candidates) {
-            if (c != null && !c.isBlank()) return c;
-        }
-        return null;
     }
 
     private void saveStudyGroupFallback(StudyGroup group, LocalDateTime preferredSchedule) {
