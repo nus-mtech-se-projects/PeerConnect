@@ -1,8 +1,15 @@
 package mtech.swe5006.peerconnect.data.sql;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 @Entity
 @Table(name = "study_groups", indexes = {
@@ -23,9 +30,6 @@ public class StudyGroup {
 
     @Column(name = "module_code", length = 50)
     private String moduleCode;
-
-    @Column(name = "course_id")
-    private UUID courseId;
 
     @Column(name = "description", length = 2000)
     private String description;
@@ -78,9 +82,6 @@ public class StudyGroup {
 
     public String getModuleCode() { return moduleCode; }
     public void setModuleCode(String moduleCode) { this.moduleCode = moduleCode; }
-
-    public UUID getCourseId() { return courseId; }
-    public void setCourseId(UUID courseId) { this.courseId = courseId; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

@@ -1,5 +1,28 @@
 package mtech.swe5006.peerconnect.api;
 
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import static mtech.swe5006.peerconnect.api.ControllerUtils.asShort;
+import static mtech.swe5006.peerconnect.api.ControllerUtils.asString;
+import static mtech.swe5006.peerconnect.api.ControllerUtils.firstNonBlank;
 import mtech.swe5006.peerconnect.data.sql.PeerFeedback;
 import mtech.swe5006.peerconnect.data.sql.PeerFeedbackRepository;
 import mtech.swe5006.peerconnect.data.sql.TutoringClass;
@@ -8,18 +31,6 @@ import mtech.swe5006.peerconnect.data.sql.TutoringEnrollment;
 import mtech.swe5006.peerconnect.data.sql.TutoringEnrollmentRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/tutoring")
@@ -390,29 +401,6 @@ public class TutoringController {
             return "Meeting link is required for online/hybrid classes";
         }
         if (maxStudents == null || maxStudents < 1) return "Max students must be at least 1";
-        return null;
-    }
-
-    private String asString(Object value) {
-        if (value == null) return null;
-        String s = String.valueOf(value).trim();
-        return s.isEmpty() ? null : s;
-    }
-
-    private Short asShort(Object value, Short defaultValue) {
-        if (value == null) return defaultValue;
-        if (value instanceof Number n) return n.shortValue();
-        try {
-            return Short.parseShort(String.valueOf(value));
-        } catch (Exception ex) {
-            return defaultValue;
-        }
-    }
-
-    private String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank()) return value;
-        }
         return null;
     }
 
