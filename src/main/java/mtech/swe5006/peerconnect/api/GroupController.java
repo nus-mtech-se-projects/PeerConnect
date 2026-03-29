@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -260,33 +261,12 @@ public class GroupController {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            if (memberEmails.length > 0) {
-                emailService.sendGroupUpdated(
-                    memberEmails,
-                    group.getName() != null ? group.getName() : "",
-                    group.getModuleCode() != null ? group.getModuleCode() : "",
-                    group.getTopic() != null ? group.getTopic() : "",
-                    schedule,
-                    group.getLocation(),
-                    group.getMeetingLink(),
-                    group.getDescription(),
-                    ownerName,
-                    ownerEmail
-                );
-            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
-                emailService.sendGroupUpdated(
-                    new String[]{ownerEmail},
-                    group.getName() != null ? group.getName() : "",
-                    group.getModuleCode() != null ? group.getModuleCode() : "",
-                    group.getTopic() != null ? group.getTopic() : "",
-                    schedule,
-                    group.getLocation(),
-                    group.getMeetingLink(),
-                    group.getDescription(),
-                    ownerName,
-                    null
-                );
-            }
+            String groupName = group.getName() != null ? group.getName() : "";
+            String moduleCodeStr = group.getModuleCode() != null ? group.getModuleCode() : "";
+            String topicStr = group.getTopic() != null ? group.getTopic() : "";
+            dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
+                emailService.sendGroupUpdated(recipients, groupName, moduleCodeStr, topicStr,
+                    schedule, group.getLocation(), group.getMeetingLink(), group.getDescription(), ownerName, cc));
         } catch (Exception emailEx) {
             log.warn("[UpdateGroup] Failed to send update emails for group {}: {}", id, emailEx.getMessage());
         }
@@ -687,37 +667,19 @@ public class GroupController {
         // Send dissolution email to all members
         try {
             String schedule = formatSchedule(group.getPreferredSchedule());
-
             List<StudyGroupMember> allMembers = groupMemberRepository.findByGroupId(id);
-            List<String> memberEmails = allMembers.stream()
+            String[] memberEmails = allMembers.stream()
                 .filter(m -> !"owner".equalsIgnoreCase(m.getRole()))
                 .map(m -> userRepository.findById(m.getUserId()).map(User::getEmail).orElse(null))
                 .filter(e -> e != null && !e.isBlank())
-                .toList();
-
+                .toArray(String[]::new);
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            if (!memberEmails.isEmpty()) {
-                emailService.sendGroupDissolved(
-                    memberEmails.toArray(new String[0]),
-                    group.getName() != null ? group.getName() : "",
-                    group.getModuleCode() != null ? group.getModuleCode() : "",
-                    group.getTopic() != null ? group.getTopic() : "",
-                    schedule,
-                    ownerName,
-                    ownerEmail
-                );
-            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
-                emailService.sendGroupDissolved(
-                    new String[]{ownerEmail},
-                    group.getName() != null ? group.getName() : "",
-                    group.getModuleCode() != null ? group.getModuleCode() : "",
-                    group.getTopic() != null ? group.getTopic() : "",
-                    schedule,
-                    ownerName,
-                    null
-                );
-            }
+            String groupName = group.getName() != null ? group.getName() : "";
+            String moduleCodeStr = group.getModuleCode() != null ? group.getModuleCode() : "";
+            String topicStr = group.getTopic() != null ? group.getTopic() : "";
+            dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
+                emailService.sendGroupDissolved(recipients, groupName, moduleCodeStr, topicStr, schedule, ownerName, cc));
         } catch (Exception emailEx) {
             log.warn("[Dissolve] Failed to send dissolution emails for group {}: {}", id, emailEx.getMessage());
         }
@@ -874,25 +836,9 @@ public class GroupController {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            if (memberEmails.length > 0) {
-                emailService.sendSessionDeleted(
-                    memberEmails,
-                    group.getName() != null ? group.getName() : "",
-                    deletedTitle,
-                    deletedStartsAt,
-                    ownerName,
-                    ownerEmail
-                );
-            } else if (ownerEmail != null && !ownerEmail.isBlank()) {
-                emailService.sendSessionDeleted(
-                    new String[]{ownerEmail},
-                    group.getName() != null ? group.getName() : "",
-                    deletedTitle,
-                    deletedStartsAt,
-                    ownerName,
-                    null
-                );
-            }
+            String groupName = group.getName() != null ? group.getName() : "";
+            dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
+                emailService.sendSessionDeleted(recipients, groupName, deletedTitle, deletedStartsAt, ownerName, cc));
         } catch (Exception emailEx) {
             log.warn("[DeleteSession] Failed to send session-deleted emails for session {} in group {}: {}", sessionId, id, emailEx.getMessage());
         }
@@ -1014,21 +960,24 @@ public class GroupController {
                   String ownerName, String cc);
     }
 
+    private void dispatchEmail(String[] members, String ownerEmail, BiConsumer<String[], String> send) {
+        if (members.length > 0) {
+            send.accept(members, ownerEmail);
+        } else if (ownerEmail != null && !ownerEmail.isBlank()) {
+            send.accept(new String[]{ownerEmail}, null);
+        }
+    }
+
     private void dispatchSessionEmail(StudyGroup group, StudySession session, SessionEmailFn fn) {
         String[] memberEmails = getApprovedMemberEmails(group.getId());
         String ownerName = resolveOwnerName(group);
         String ownerEmail = resolveOwnerEmail(group);
         String groupName = group.getName() != null ? group.getName() : "";
         String endsAt = session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null;
-        if (memberEmails.length > 0) {
-            fn.send(memberEmails, groupName, session.getTitle(),
-                formatSchedule(session.getStartsAt()), endsAt,
-                session.getLocation(), session.getMeetingLink(), ownerName, ownerEmail);
-        } else if (ownerEmail != null && !ownerEmail.isBlank()) {
-            fn.send(new String[]{ownerEmail}, groupName, session.getTitle(),
-                formatSchedule(session.getStartsAt()), endsAt,
-                session.getLocation(), session.getMeetingLink(), ownerName, null);
-        }
+        String startsAt = formatSchedule(session.getStartsAt());
+        dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
+            fn.send(recipients, groupName, session.getTitle(), startsAt, endsAt,
+                session.getLocation(), session.getMeetingLink(), ownerName, cc));
     }
 
     /**
