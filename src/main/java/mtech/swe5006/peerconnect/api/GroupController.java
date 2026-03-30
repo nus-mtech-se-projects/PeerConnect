@@ -444,22 +444,7 @@ public class GroupController {
         if (!isMember(group.getId(), user.getId()) && !isAdmin(group, user.getId())) {
             return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Not authorized to view members"));
         }
-
-        List<StudyGroupMember> members = groupMemberRepository.findByGroupId(id);
-        List<Map<String, Object>> payload = new ArrayList<>();
-        for (StudyGroupMember member : members) {
-            User mUser = userRepository.findById(member.getUserId()).orElse(null);
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("userId", member.getUserId());
-            row.put("role", member.getRole());
-            row.put(KEY_MEMBERSHIP_STATUS, member.getMembershipStatus());
-            row.put("joinedAt", member.getJoinedAt());
-            row.put(KEY_EMAIL, mUser != null ? mUser.getEmail() : null);
-            row.put("firstName", mUser != null ? mUser.getFirstName() : null);
-            row.put("lastName", mUser != null ? mUser.getLastName() : null);
-            payload.add(row);
-        }
-        return ResponseEntity.ok(payload);
+        return ResponseEntity.ok(getMembersPayload(id));
     }
 
     @PostMapping("/{id}/members/invite")
@@ -918,7 +903,7 @@ public class GroupController {
         resp.put(KEY_GROUP_ID, session.getGroupId().toString());
         resp.put(FIELD_TITLE, session.getTitle());
         resp.put(FIELD_NOTES, session.getNotes() != null ? session.getNotes() : "");
-        resp.put(FIELD_STARTS_AT, session.getStartsAt().toString());
+        resp.put(FIELD_STARTS_AT, session.getStartsAt() != null ? session.getStartsAt().toString() : null);
         resp.put(FIELD_ENDS_AT, session.getEndsAt() != null ? session.getEndsAt().toString() : null);
         resp.put(FIELD_LOCATION, session.getLocation() != null ? session.getLocation() : "");
         resp.put(FIELD_MEETING_LINK, session.getMeetingLink() != null ? session.getMeetingLink() : "");
@@ -1098,19 +1083,9 @@ public class GroupController {
     }
 
     private List<Map<String, Object>> getSessionsPayload(UUID groupId) {
-        return studySessionRepository.findByGroupIdOrderByStartsAtAsc(groupId).stream().map(s -> {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", s.getId().toString());
-            row.put(KEY_GROUP_ID, s.getGroupId().toString());
-            row.put(FIELD_TITLE, s.getTitle());
-            row.put(FIELD_NOTES, s.getNotes() != null ? s.getNotes() : "");
-            row.put(FIELD_STARTS_AT, s.getStartsAt() != null ? s.getStartsAt().toString() : null);
-            row.put(FIELD_ENDS_AT, s.getEndsAt() != null ? s.getEndsAt().toString() : null);
-            row.put(FIELD_LOCATION, s.getLocation() != null ? s.getLocation() : "");
-            row.put(FIELD_MEETING_LINK, s.getMeetingLink() != null ? s.getMeetingLink() : "");
-            row.put(KEY_CREATED_BY, s.getCreatedBy().toString());
-            return row;
-        }).toList();
+        return studySessionRepository.findByGroupIdOrderByStartsAtAsc(groupId).stream()
+            .map(this::buildSessionResponse)
+            .toList();
     }
 
     private List<Map<String, Object>> getMembersPayload(UUID groupId) {
