@@ -44,6 +44,7 @@ repositories {
 
 ext {
 	set('springModulithVersion', "2.0.2")
+	set('logback.version', '1.5.25')
 }
 
 dependencies {
