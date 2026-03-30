@@ -328,9 +328,7 @@ public class GroupController {
             return ResponseEntity.status(400).body(Map.of(ERR_KEY, "Group is dissolved"));
         }
 
-        // Check if the group owner has restricted this user
-        if (group.getCreatedBy() != null
-                && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), user.getId())) {
+        if (isRestrictedFromGroup(group, user.getId())) {
             return ResponseEntity.status(403).body(Map.of(ERR_KEY, "You have been restricted from joining this group by the owner"));
         }
 
@@ -492,9 +490,7 @@ public class GroupController {
         User target = userRepository.findByEmail(email).orElse(null);
         if (target == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, "Target user not found"));
 
-        // Check if the group owner has restricted this user
-        if (group.getCreatedBy() != null
-                && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), target.getId())) {
+        if (isRestrictedFromGroup(group, target.getId())) {
             return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "This user has been restricted and cannot be invited"));
         }
 
@@ -936,6 +932,11 @@ public class GroupController {
 
     private boolean isOwner(StudyGroup group, UUID userId) {
         return group.getCreatedBy() != null && group.getCreatedBy().equals(userId);
+    }
+
+    private boolean isRestrictedFromGroup(StudyGroup group, UUID userId) {
+        return group.getCreatedBy() != null
+            && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), userId);
     }
 
     private boolean isAdmin(StudyGroup group, UUID userId) {
