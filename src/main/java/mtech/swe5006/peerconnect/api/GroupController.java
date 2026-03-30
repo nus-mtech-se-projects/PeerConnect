@@ -299,11 +299,11 @@ public class GroupController {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            String groupName = group.getName() != null ? group.getName() : "";
-            String moduleCodeStr = group.getModuleCode() != null ? group.getModuleCode() : "";
-            String topicStr = group.getTopic() != null ? group.getTopic() : "";
+            String groupNameStr = groupName(group);
+            String moduleCodeStr = groupModule(group);
+            String topicStr = groupTopic(group);
             dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
-                emailService.sendGroupUpdated(recipients, groupName, moduleCodeStr, topicStr,
+                emailService.sendGroupUpdated(recipients, groupNameStr, moduleCodeStr, topicStr,
                     schedule, group.getLocation(), group.getMeetingLink(), group.getDescription(), ownerName, cc));
         } catch (Exception emailEx) {
             log.warn("[UpdateGroup] Failed to send update emails for group {}: {}", id, emailEx.getMessage());
@@ -366,17 +366,10 @@ public class GroupController {
 
         // Send join notification email (TO: owner, CC: user)
         try {
-            String ownerEmail = resolveOwnerEmail(group);
-            String userName = (user.getFirstName() + " " + user.getLastName()).trim();
-            String schedule = formatSchedule(group.getPreferredSchedule());
             emailService.sendUserJoinedGroup(
-                ownerEmail,
-                user.getEmail(),
-                userName,
-                group.getName() != null ? group.getName() : "",
-                group.getModuleCode() != null ? group.getModuleCode() : "",
-                group.getTopic() != null ? group.getTopic() : "",
-                schedule
+                resolveOwnerEmail(group), user.getEmail(), resolveUserName(user, ""),
+                groupName(group), groupModule(group), groupTopic(group),
+                formatSchedule(group.getPreferredSchedule())
             );
         } catch (Exception emailEx) {
             log.warn("[JoinGroup] Failed to send join notification: {}", emailEx.getMessage());
@@ -425,17 +418,10 @@ public class GroupController {
 
         // Send leave notification email (TO: owner, CC: user)
         try {
-            String ownerEmail = resolveOwnerEmail(group);
-            String userName = (user.getFirstName() + " " + user.getLastName()).trim();
-            String schedule = formatSchedule(group.getPreferredSchedule());
             emailService.sendUserLeftGroup(
-                ownerEmail,
-                user.getEmail(),
-                userName,
-                group.getName() != null ? group.getName() : "",
-                group.getModuleCode() != null ? group.getModuleCode() : "",
-                group.getTopic() != null ? group.getTopic() : "",
-                schedule
+                resolveOwnerEmail(group), user.getEmail(), resolveUserName(user, ""),
+                groupName(group), groupModule(group), groupTopic(group),
+                formatSchedule(group.getPreferredSchedule())
             );
         } catch (Exception emailEx) {
             log.warn("[LeaveGroup] Failed to send leave notification: {}", emailEx.getMessage());
@@ -515,19 +501,7 @@ public class GroupController {
 
         // Send invitation email notification
         try {
-            String inviteeName = (target.getFirstName() + " " + target.getLastName()).trim();
-            String schedule = formatSchedule(group.getPreferredSchedule());
-
-            emailService.sendGroupInvitation(
-                target.getEmail(),
-                inviteeName,
-                group.getName() != null ? group.getName() : "",
-                group.getModuleCode() != null ? group.getModuleCode() : "",
-                group.getTopic() != null ? group.getTopic() : "",
-                schedule,
-                resolveOwnerName(group),
-                resolveOwnerEmail(group)
-            );
+            dispatchMemberEmail(target, group, emailService::sendGroupInvitation);
         } catch (Exception emailEx) {
             log.warn("[Invite] Failed to send invitation email to {}: {}", email, emailEx.getMessage());
         }
@@ -565,23 +539,7 @@ public class GroupController {
         // Send approval notification email
         try {
             User member = userRepository.findById(userId).orElse(null);
-            String memberName = member != null
-                ? ((member.getFirstName() + " " + member.getLastName()).trim())
-                : "Member";
-            String schedule = formatSchedule(group.getPreferredSchedule());
-
-            if (member != null && member.getEmail() != null) {
-                emailService.sendMemberApproved(
-                    member.getEmail(),
-                    memberName,
-                    group.getName() != null ? group.getName() : "",
-                    group.getModuleCode() != null ? group.getModuleCode() : "",
-                    group.getTopic() != null ? group.getTopic() : "",
-                    schedule,
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
-                );
-            }
+            dispatchMemberEmail(member, group, emailService::sendMemberApproved);
         } catch (Exception emailEx) {
             log.warn("[Approve] Failed to send approval email for user {} in group {}: {}", userId, id, emailEx.getMessage());
         }
@@ -620,23 +578,7 @@ public class GroupController {
 
         // Send rejection notification email
         try {
-            String memberName = member != null
-                ? ((member.getFirstName() + " " + member.getLastName()).trim())
-                : "Member";
-            String schedule = formatSchedule(group.getPreferredSchedule());
-
-            if (member != null && member.getEmail() != null) {
-                emailService.sendMemberRejected(
-                    member.getEmail(),
-                    memberName,
-                    group.getName() != null ? group.getName() : "",
-                    group.getModuleCode() != null ? group.getModuleCode() : "",
-                    group.getTopic() != null ? group.getTopic() : "",
-                    schedule,
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
-                );
-            }
+            dispatchMemberEmail(member, group, emailService::sendMemberRejected);
         } catch (Exception emailEx) {
             log.warn("[RemoveMember] Failed to send rejection email for user {} in group {}: {}", userId, id, emailEx.getMessage());
         }
@@ -707,11 +649,11 @@ public class GroupController {
                 .toArray(String[]::new);
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            String groupName = group.getName() != null ? group.getName() : "";
-            String moduleCodeStr = group.getModuleCode() != null ? group.getModuleCode() : "";
-            String topicStr = group.getTopic() != null ? group.getTopic() : "";
+            String groupNameStr = groupName(group);
+            String moduleCodeStr = groupModule(group);
+            String topicStr = groupTopic(group);
             dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
-                emailService.sendGroupDissolved(recipients, groupName, moduleCodeStr, topicStr, schedule, ownerName, cc));
+                emailService.sendGroupDissolved(recipients, groupNameStr, moduleCodeStr, topicStr, schedule, ownerName, cc));
         } catch (Exception emailEx) {
             log.warn("[Dissolve] Failed to send dissolution emails for group {}: {}", id, emailEx.getMessage());
         }
@@ -868,7 +810,7 @@ public class GroupController {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            String groupName = group.getName() != null ? group.getName() : "";
+            String groupName = groupName(group);
             dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
                 emailService.sendSessionDeleted(recipients, groupName, deletedTitle, deletedStartsAt, ownerName, cc));
         } catch (Exception emailEx) {
@@ -962,6 +904,14 @@ public class GroupController {
         return owner != null ? owner.getEmail() : "";
     }
 
+    private String resolveUserName(User user, String fallback) {
+        return user != null ? (user.getFirstName() + " " + user.getLastName()).trim() : fallback;
+    }
+
+    private String groupName(StudyGroup g)   { return g.getName()       != null ? g.getName()       : ""; }
+    private String groupModule(StudyGroup g) { return g.getModuleCode() != null ? g.getModuleCode() : ""; }
+    private String groupTopic(StudyGroup g)  { return g.getTopic()      != null ? g.getTopic()      : ""; }
+
     private Map<String, Object> buildSessionResponse(StudySession session) {
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("id", session.getId().toString());
@@ -996,6 +946,19 @@ public class GroupController {
                   String ownerName, String cc);
     }
 
+    @FunctionalInterface
+    private interface MemberEmailFn {
+        void send(String email, String name, String groupName, String moduleCode,
+                  String topic, String schedule, String ownerName, String ownerEmail);
+    }
+
+    private void dispatchMemberEmail(User member, StudyGroup group, MemberEmailFn fn) {
+        if (member == null || member.getEmail() == null) return;
+        fn.send(member.getEmail(), resolveUserName(member, "Member"),
+                groupName(group), groupModule(group), groupTopic(group),
+                formatSchedule(group.getPreferredSchedule()), resolveOwnerName(group), resolveOwnerEmail(group));
+    }
+
     private void dispatchEmail(String[] members, String ownerEmail, BiConsumer<String[], String> send) {
         if (members.length > 0) {
             send.accept(members, ownerEmail);
@@ -1008,7 +971,7 @@ public class GroupController {
         String[] memberEmails = getApprovedMemberEmails(group.getId());
         String ownerName = resolveOwnerName(group);
         String ownerEmail = resolveOwnerEmail(group);
-        String groupName = group.getName() != null ? group.getName() : "";
+        String groupName = groupName(group);
         String endsAt = session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null;
         String startsAt = formatSchedule(session.getStartsAt());
         dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
