@@ -1,21 +1,30 @@
 package mtech.swe5006.peerconnect.api;
 
-import mtech.swe5006.peerconnect.data.sql.RestrictedUser;
-import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
-import mtech.swe5006.peerconnect.data.sql.User;
-import mtech.swe5006.peerconnect.data.sql.UserRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import static mtech.swe5006.peerconnect.api.ControllerUtils.resolveUser;
+import mtech.swe5006.peerconnect.data.sql.RestrictedUser;
+import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
+import mtech.swe5006.peerconnect.data.sql.User;
+import mtech.swe5006.peerconnect.data.sql.UserRepository;
 
 @RestController
 @RequestMapping("/api/restricted-users")
@@ -150,7 +159,6 @@ public class RestrictedUserController {
     }
 
     private User getCurrentUser(Authentication auth) {
-        if (auth == null) return null;
-        return userRepository.findByEmail(auth.getName()).orElse(null);
+        return resolveUser(auth, userRepository);
     }
 }
