@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
@@ -34,6 +35,7 @@ import static mtech.swe5006.peerconnect.api.ControllerUtils.asBoolean;
 import static mtech.swe5006.peerconnect.api.ControllerUtils.asShort;
 import static mtech.swe5006.peerconnect.api.ControllerUtils.asString;
 import static mtech.swe5006.peerconnect.api.ControllerUtils.firstNonBlank;
+import static mtech.swe5006.peerconnect.api.ControllerUtils.resolveUser;
 import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
 import mtech.swe5006.peerconnect.data.sql.StudyGroup;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMember;
@@ -52,6 +54,42 @@ public class GroupController {
 
     private static final Logger log = LoggerFactory.getLogger(GroupController.class);
     private static final String SESSION_NOT_FOUND = "Session not found";
+    private static final String USER_NOT_FOUND = "User not found";
+    private static final String GROUP_NOT_FOUND = "Group not found";
+    private static final String ERR_KEY = "error";
+    private static final String STATUS_APPROVED = "approved";
+    private static final String STATUS_PENDING = "pending";
+    private static final String STATUS_DISSOLVED = "dissolved";
+    private static final String STATUS_ACTIVE = "active";
+    private static final String ROLE_OWNER = "owner";
+    private static final String ROLE_MEMBER = "member";
+    private static final String ROLE_ADMIN  = "admin";
+    private static final String STUDY_MODE_ONLINE    = "online";
+    private static final String STUDY_MODE_IN_PERSON = "in-person";
+    private static final String STUDY_MODE_HYBRID    = "hybrid";
+    // Request body field keys
+    private static final String FIELD_MODULE_CODE       = "moduleCode";
+    private static final String FIELD_DESCRIPTION       = "description";
+    private static final String FIELD_TOPIC             = "topic";
+    private static final String FIELD_STUDY_MODE        = "studyMode";
+    private static final String FIELD_LOCATION          = "location";
+    private static final String FIELD_MEETING_LINK      = "meetingLink";
+    private static final String FIELD_PREFERRED_SCHEDULE = "preferredSchedule";
+    private static final String FIELD_MAX_MEMBERS       = "maxMembers";
+    private static final String FIELD_APPROVAL_REQUIRED = "approvalRequired";
+    private static final String FIELD_TITLE             = "title";
+    private static final String FIELD_NOTES             = "notes";
+    private static final String FIELD_STARTS_AT         = "startsAt";
+    private static final String FIELD_ENDS_AT           = "endsAt";
+    // Response payload keys
+    private static final String KEY_JOINED           = "joined";
+    private static final String KEY_MEMBERSHIP_STATUS = "membershipStatus";
+    private static final String KEY_GROUP_ID         = "groupId";
+    private static final String KEY_MEMBER_COUNT     = "memberCount";
+    private static final String KEY_EMAIL            = "email";
+    private static final String KEY_INVITED          = "invited";
+    private static final String KEY_CREATED_BY       = "createdBy";
+    private static final String MSG_GROUP_FULL       = "Group is full";
     private final StudyGroupRepository groupRepository;
     private final StudyGroupMemberRepository groupMemberRepository;
     private final StudySessionRepository studySessionRepository;
@@ -82,7 +120,7 @@ public class GroupController {
     @GetMapping
     public ResponseEntity<?> getAllGroups(Authentication auth) {
         User currentUser = getCurrentUser(auth);
-        List<StudyGroup> groups = groupRepository.findByStatusInOrderByCreatedAtDesc(List.of("active", "full"));
+        List<StudyGroup> groups = groupRepository.findByStatusInOrderByCreatedAtDesc(List.of(STATUS_ACTIVE, "full"));
 
         // Batch-load all blocker IDs for the current user in ONE query, then filter in memory
         if (currentUser != null) {
@@ -114,9 +152,9 @@ public class GroupController {
         UUID currentUserId = currentUser != null ? currentUser.getId() : null;
         for (StudyGroupMember m : allMembers) {
             UUID gid = m.getGroupId();
-            if ("approved".equalsIgnoreCase(m.getMembershipStatus())) {
+            if (STATUS_APPROVED.equalsIgnoreCase(m.getMembershipStatus())) {
                 approvedCounts.merge(gid, 1L, Long::sum);
-            } else if ("pending".equalsIgnoreCase(m.getMembershipStatus())) {
+            } else if (STATUS_PENDING.equalsIgnoreCase(m.getMembershipStatus())) {
                 pendingCounts.merge(gid, 1L, Long::sum);
             }
             if (currentUserId != null && currentUserId.equals(m.getUserId())) {
@@ -142,28 +180,28 @@ public class GroupController {
     public ResponseEntity<?> createGroup(Authentication auth, @RequestBody Map<String, Object> body) {
         User user = getCurrentUser(auth);
         if (user == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+            return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         }
 
         String name = asString(body.get("name"));
-        String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")));
-        String description = asString(body.get("description"));
-        String topic = firstNonBlank(asString(body.get("topic")), moduleCode);
-        String studyMode = firstNonBlank(asString(body.get("studyMode")), "online").toLowerCase();
-        String location = asString(body.get("location"));
-        String meetingLink = asString(body.get("meetingLink"));
-        String preferredScheduleStr = asString(body.get("preferredSchedule"));
+        String moduleCode = firstNonBlank(asString(body.get(FIELD_MODULE_CODE)), asString(body.get("courseCode")));
+        String description = asString(body.get(FIELD_DESCRIPTION));
+        String topic = firstNonBlank(asString(body.get(FIELD_TOPIC)), moduleCode);
+        String studyMode = firstNonBlank(asString(body.get(FIELD_STUDY_MODE)), STUDY_MODE_ONLINE).toLowerCase();
+        String location = asString(body.get(FIELD_LOCATION));
+        String meetingLink = asString(body.get(FIELD_MEETING_LINK));
+        String preferredScheduleStr = asString(body.get(FIELD_PREFERRED_SCHEDULE));
         LocalDateTime preferredSchedule = parseDateTime(preferredScheduleStr);
-        Short maxMembers = asShort(body.get("maxMembers"), (short) 10);
-        boolean approvalRequired = asBoolean(body.get("approvalRequired"), false);
+        Short maxMembers = asShort(body.get(FIELD_MAX_MEMBERS), (short) 10);
+        boolean approvalRequired = asBoolean(body.get(FIELD_APPROVAL_REQUIRED), false);
 
         if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
         }
 
         String validationError = validateGroupInput(name, moduleCode, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
         if (validationError != null) {
-            return ResponseEntity.badRequest().body(Map.of("error", validationError));
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, validationError));
         }
 
         StudyGroup group = new StudyGroup();
@@ -177,7 +215,7 @@ public class GroupController {
         group.setPreferredSchedule(preferredSchedule);
         group.setApprovalRequired(approvalRequired);
         group.setCreatedBy(user.getId());
-        group.setStatus("active");
+        group.setStatus(STATUS_ACTIVE);
         group.setMaxMembers(maxMembers);
 
         try {
@@ -190,15 +228,15 @@ public class GroupController {
                 saveStudyGroupFallback(group, preferredSchedule);
             } catch (Exception fallbackEx) {
                 log.error("[StudyGroup] FAILED to save group into dbo.study_groups: {}", fallbackEx.getMessage(), fallbackEx);
-                return ResponseEntity.status(500).body(Map.of("error", "Failed to save study group: " + fallbackEx.getMessage()));
+                return ResponseEntity.status(500).body(Map.of(ERR_KEY, "Failed to save study group: " + fallbackEx.getMessage()));
             }
         }
 
         StudyGroupMember ownerMembership = new StudyGroupMember();
         ownerMembership.setGroupId(group.getId());
         ownerMembership.setUserId(user.getId());
-        ownerMembership.setRole("owner");
-        ownerMembership.setMembershipStatus("approved");
+        ownerMembership.setRole(ROLE_OWNER);
+        ownerMembership.setMembershipStatus(STATUS_APPROVED);
         try {
             groupMemberRepository.save(ownerMembership);
             log.info("[StudyGroup] Owner membership saved for groupId={} userId={}", group.getId(), user.getId());
@@ -224,37 +262,37 @@ public class GroupController {
     @PutMapping("/{id}")
     public ResponseEntity<?> updateGroup(@PathVariable UUID id, Authentication auth, @RequestBody Map<String, Object> body) {
         User user = getCurrentUser(auth);
-        if (user == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (user == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
 
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, user.getId())) return ResponseEntity.status(403).body(Map.of("error", "Not authorized to edit this group"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, user.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Not authorized to edit this group"));
 
         String name = firstNonBlank(asString(body.get("name")), group.getName());
-        String moduleCode = firstNonBlank(asString(body.get("moduleCode")), asString(body.get("courseCode")), group.getModuleCode());
-        String description = firstNonBlank(asString(body.get("description")), group.getDescription());
-        String topic = firstNonBlank(asString(body.get("topic")), group.getTopic());
-        String studyMode = firstNonBlank(asString(body.get("studyMode")), group.getStudyMode()).toLowerCase();
-        String location = body.containsKey("location") ? asString(body.get("location")) : group.getLocation();
-        String meetingLink = body.containsKey("meetingLink") ? asString(body.get("meetingLink")) : group.getMeetingLink();
-        String preferredScheduleStr = asString(body.get("preferredSchedule"));
-        LocalDateTime preferredSchedule = body.containsKey("preferredSchedule")
+        String moduleCode = firstNonBlank(asString(body.get(FIELD_MODULE_CODE)), asString(body.get("courseCode")), group.getModuleCode());
+        String description = firstNonBlank(asString(body.get(FIELD_DESCRIPTION)), group.getDescription());
+        String topic = firstNonBlank(asString(body.get(FIELD_TOPIC)), group.getTopic());
+        String studyMode = firstNonBlank(asString(body.get(FIELD_STUDY_MODE)), group.getStudyMode()).toLowerCase();
+        String location = body.containsKey(FIELD_LOCATION) ? asString(body.get(FIELD_LOCATION)) : group.getLocation();
+        String meetingLink = body.containsKey(FIELD_MEETING_LINK) ? asString(body.get(FIELD_MEETING_LINK)) : group.getMeetingLink();
+        String preferredScheduleStr = asString(body.get(FIELD_PREFERRED_SCHEDULE));
+        LocalDateTime preferredSchedule = body.containsKey(FIELD_PREFERRED_SCHEDULE)
             ? parseDateTime(preferredScheduleStr)
             : group.getPreferredSchedule();
         if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
         }
-        Short maxMembers = body.containsKey("maxMembers") ? asShort(body.get("maxMembers"), group.getMaxMembers()) : group.getMaxMembers();
-        boolean approvalRequired = body.containsKey("approvalRequired")
-            ? asBoolean(body.get("approvalRequired"), false)
+        Short maxMembers = body.containsKey(FIELD_MAX_MEMBERS) ? asShort(body.get(FIELD_MAX_MEMBERS), group.getMaxMembers()) : group.getMaxMembers();
+        boolean approvalRequired = body.containsKey(FIELD_APPROVAL_REQUIRED)
+            ? asBoolean(body.get(FIELD_APPROVAL_REQUIRED), false)
             : Boolean.TRUE.equals(group.getApprovalRequired());
 
         String validationError = validateGroupInput(name, moduleCode, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
-        if (validationError != null) return ResponseEntity.badRequest().body(Map.of("error", validationError));
+        if (validationError != null) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, validationError));
 
-        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), "approved");
+        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), STATUS_APPROVED);
         if (maxMembers != null && approvedCount > maxMembers) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Max members cannot be below current approved member count"));
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Max members cannot be below current approved member count"));
         }
 
         group.setName(name);
@@ -264,7 +302,7 @@ public class GroupController {
         group.setStudyMode(studyMode);
         group.setLocation(location);
         group.setMeetingLink(meetingLink);
-        group.setPreferredSchedule(body.containsKey("preferredSchedule") ? preferredSchedule : group.getPreferredSchedule());
+        group.setPreferredSchedule(body.containsKey(FIELD_PREFERRED_SCHEDULE) ? preferredSchedule : group.getPreferredSchedule());
         group.setMaxMembers(maxMembers);
         group.setApprovalRequired(approvalRequired);
         refreshGroupStatus(group);
@@ -276,11 +314,11 @@ public class GroupController {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            String groupName = group.getName() != null ? group.getName() : "";
-            String moduleCodeStr = group.getModuleCode() != null ? group.getModuleCode() : "";
-            String topicStr = group.getTopic() != null ? group.getTopic() : "";
+            String groupNameStr = groupName(group);
+            String moduleCodeStr = groupModule(group);
+            String topicStr = groupTopic(group);
             dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
-                emailService.sendGroupUpdated(recipients, groupName, moduleCodeStr, topicStr,
+                emailService.sendGroupUpdated(recipients, groupNameStr, moduleCodeStr, topicStr,
                     schedule, group.getLocation(), group.getMeetingLink(), group.getDescription(), ownerName, cc));
         } catch (Exception emailEx) {
             log.warn("[UpdateGroup] Failed to send update emails for group {}: {}", id, emailEx.getMessage());
@@ -293,53 +331,51 @@ public class GroupController {
     public ResponseEntity<?> joinGroup(@PathVariable java.util.UUID id, Authentication auth) {
         User user = getCurrentUser(auth);
         if (user == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+            return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         }
 
         StudyGroup group = groupRepository.findById(id).orElse(null);
         if (group == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
+            return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
         }
 
-        if ("dissolved".equalsIgnoreCase(group.getStatus())) {
-            return ResponseEntity.status(400).body(Map.of("error", "Group is dissolved"));
+        if (STATUS_DISSOLVED.equalsIgnoreCase(group.getStatus())) {
+            return ResponseEntity.status(400).body(Map.of(ERR_KEY, "Group is dissolved"));
         }
 
-        // Check if the group owner has restricted this user
-        if (group.getCreatedBy() != null
-                && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), user.getId())) {
-            return ResponseEntity.status(403).body(Map.of("error", "You have been restricted from joining this group by the owner"));
+        if (isRestrictedFromGroup(group, user.getId())) {
+            return ResponseEntity.status(403).body(Map.of(ERR_KEY, "You have been restricted from joining this group by the owner"));
         }
 
         Optional<StudyGroupMember> existing = groupMemberRepository.findByGroupIdAndUserId(id, user.getId());
         if (existing.isPresent()) {
             StudyGroupMember found = existing.get();
-            long count = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
+            long count = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
             return ResponseEntity.ok(Map.of(
-                "joined", "approved".equalsIgnoreCase(found.getMembershipStatus()),
+                KEY_JOINED, STATUS_APPROVED.equalsIgnoreCase(found.getMembershipStatus()),
                 "alreadyJoined", true,
-                "membershipStatus", found.getMembershipStatus(),
-                "groupId", id,
-                "memberCount", count
+                KEY_MEMBERSHIP_STATUS, found.getMembershipStatus(),
+                KEY_GROUP_ID, id,
+                KEY_MEMBER_COUNT, count
             ));
         }
 
-        long currentCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
+        long currentCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
         Short maxMembers = group.getMaxMembers();
         if (maxMembers != null && currentCount >= maxMembers) {
             group.setStatus("full");
             groupRepository.save(group);
-            return ResponseEntity.status(400).body(Map.of("error", "Group is full"));
+            return ResponseEntity.status(400).body(Map.of(ERR_KEY, MSG_GROUP_FULL));
         }
 
         StudyGroupMember membership = new StudyGroupMember();
         membership.setGroupId(id);
         membership.setUserId(user.getId());
-        membership.setRole("member");
-        membership.setMembershipStatus(Boolean.TRUE.equals(group.getApprovalRequired()) ? "pending" : "approved");
+        membership.setRole(ROLE_MEMBER);
+        membership.setMembershipStatus(Boolean.TRUE.equals(group.getApprovalRequired()) ? STATUS_PENDING : STATUS_APPROVED);
         groupMemberRepository.save(membership);
 
-        long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
+        long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
         refreshGroupStatus(group);
         groupRepository.save(group);
         if ("approved".equalsIgnoreCase(membership.getMembershipStatus())) {
@@ -357,28 +393,20 @@ public class GroupController {
 
         // Send join notification email (TO: owner, CC: user)
         try {
-            String ownerEmail = resolveOwnerEmail(group);
-            String ownerName = resolveOwnerName(group);
-            String userName = (user.getFirstName() + " " + user.getLastName()).trim();
-            String schedule = formatSchedule(group.getPreferredSchedule());
             emailService.sendUserJoinedGroup(
-                ownerEmail,
-                user.getEmail(),
-                userName,
-                group.getName() != null ? group.getName() : "",
-                group.getModuleCode() != null ? group.getModuleCode() : "",
-                group.getTopic() != null ? group.getTopic() : "",
-                schedule
+                resolveOwnerEmail(group), user.getEmail(), resolveUserName(user, ""),
+                groupName(group), groupModule(group), groupTopic(group),
+                formatSchedule(group.getPreferredSchedule())
             );
         } catch (Exception emailEx) {
             log.warn("[JoinGroup] Failed to send join notification: {}", emailEx.getMessage());
         }
         return ResponseEntity.ok(Map.of(
-            "joined", "approved".equalsIgnoreCase(membership.getMembershipStatus()),
+            KEY_JOINED, STATUS_APPROVED.equalsIgnoreCase(membership.getMembershipStatus()),
             "alreadyJoined", false,
-            "membershipStatus", membership.getMembershipStatus(),
-            "groupId", id,
-            "memberCount", updatedCount
+            KEY_MEMBERSHIP_STATUS, membership.getMembershipStatus(),
+            KEY_GROUP_ID, id,
+            KEY_MEMBER_COUNT, updatedCount
         ));
     }
 
@@ -386,31 +414,31 @@ public class GroupController {
     public ResponseEntity<?> leaveGroup(@PathVariable java.util.UUID id, Authentication auth) {
         User user = getCurrentUser(auth);
         if (user == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+            return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         }
 
         StudyGroup group = groupRepository.findById(id).orElse(null);
         if (group == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
+            return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
         }
 
         Optional<StudyGroupMember> membership = groupMemberRepository.findByGroupIdAndUserId(id, user.getId());
         if (membership.isEmpty()) {
-            long count = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
+            long count = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
             return ResponseEntity.ok(Map.of(
                 "left", true,
                 "notMember", true,
-                "groupId", id,
-                "memberCount", count
+                KEY_GROUP_ID, id,
+                KEY_MEMBER_COUNT, count
             ));
         }
 
-        if ("owner".equalsIgnoreCase(membership.get().getRole())) {
-            return ResponseEntity.status(400).body(Map.of("error", "Group owner cannot leave the group"));
+        if (ROLE_OWNER.equalsIgnoreCase(membership.get().getRole())) {
+            return ResponseEntity.status(400).body(Map.of(ERR_KEY, "Group owner cannot leave the group"));
         }
 
         groupMemberRepository.deleteByGroupIdAndUserId(id, user.getId());
-        long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
+        long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
         refreshGroupStatus(group);
         groupRepository.save(group);
         auditService.record(
@@ -426,18 +454,10 @@ public class GroupController {
 
         // Send leave notification email (TO: owner, CC: user)
         try {
-            String ownerEmail = resolveOwnerEmail(group);
-            String ownerName = resolveOwnerName(group);
-            String userName = (user.getFirstName() + " " + user.getLastName()).trim();
-            String schedule = formatSchedule(group.getPreferredSchedule());
             emailService.sendUserLeftGroup(
-                ownerEmail,
-                user.getEmail(),
-                userName,
-                group.getName() != null ? group.getName() : "",
-                group.getModuleCode() != null ? group.getModuleCode() : "",
-                group.getTopic() != null ? group.getTopic() : "",
-                schedule
+                resolveOwnerEmail(group), user.getEmail(), resolveUserName(user, ""),
+                groupName(group), groupModule(group), groupTopic(group),
+                formatSchedule(group.getPreferredSchedule())
             );
         } catch (Exception emailEx) {
             log.warn("[LeaveGroup] Failed to send leave notification: {}", emailEx.getMessage());
@@ -446,75 +466,58 @@ public class GroupController {
         return ResponseEntity.ok(Map.of(
             "left", true,
             "notMember", false,
-            "groupId", id,
-            "memberCount", updatedCount
+            KEY_GROUP_ID, id,
+            KEY_MEMBER_COUNT, updatedCount
         ));
     }
 
     @GetMapping("/{id}/members")
     public ResponseEntity<?> getMembers(@PathVariable UUID id, Authentication auth) {
         User user = getCurrentUser(auth);
-        if (user == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (user == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
         if (!isMember(group.getId(), user.getId()) && !isAdmin(group, user.getId())) {
-            return ResponseEntity.status(403).body(Map.of("error", "Not authorized to view members"));
+            return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Not authorized to view members"));
         }
-
-        List<StudyGroupMember> members = groupMemberRepository.findByGroupId(id);
-        List<Map<String, Object>> payload = new ArrayList<>();
-        for (StudyGroupMember member : members) {
-            User mUser = userRepository.findById(member.getUserId()).orElse(null);
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("userId", member.getUserId());
-            row.put("role", member.getRole());
-            row.put("membershipStatus", member.getMembershipStatus());
-            row.put("joinedAt", member.getJoinedAt());
-            row.put("email", mUser != null ? mUser.getEmail() : null);
-            row.put("firstName", mUser != null ? mUser.getFirstName() : null);
-            row.put("lastName", mUser != null ? mUser.getLastName() : null);
-            payload.add(row);
-        }
-        return ResponseEntity.ok(payload);
+        return ResponseEntity.ok(getMembersPayload(id));
     }
 
     @PostMapping("/{id}/members/invite")
     public ResponseEntity<?> inviteMember(@PathVariable UUID id, Authentication auth, @RequestBody Map<String, Object> body) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can invite members"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only admins can invite members"));
 
-        String email = asString(body.get("email"));
-        if (email == null || email.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Email is required"));
+        String email = asString(body.get(KEY_EMAIL));
+        if (email == null || email.isBlank()) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Email is required"));
 
         User target = userRepository.findByEmail(email).orElse(null);
-        if (target == null) return ResponseEntity.status(404).body(Map.of("error", "Target user not found"));
+        if (target == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, "Target user not found"));
 
-        // Check if the group owner has restricted this user
-        if (group.getCreatedBy() != null
-                && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), target.getId())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "This user has been restricted and cannot be invited"));
+        if (isRestrictedFromGroup(group, target.getId())) {
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "This user has been restricted and cannot be invited"));
         }
 
         Optional<StudyGroupMember> existing = groupMemberRepository.findByGroupIdAndUserId(id, target.getId());
         if (existing.isPresent()) {
-            return ResponseEntity.ok(Map.of("invited", false, "message", "User is already associated with this group"));
+            return ResponseEntity.ok(Map.of(KEY_INVITED, false, "message", "User is already associated with this group"));
         }
 
-        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
+        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
         if (group.getMaxMembers() != null && approvedCount >= group.getMaxMembers()) {
             group.setStatus("full");
             groupRepository.save(group);
-            return ResponseEntity.badRequest().body(Map.of("error", "Group is full"));
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, MSG_GROUP_FULL));
         }
 
         StudyGroupMember membership = new StudyGroupMember();
         membership.setGroupId(id);
         membership.setUserId(target.getId());
-        membership.setRole("member");
-        membership.setMembershipStatus("invited");
+        membership.setRole(ROLE_MEMBER);
+        membership.setMembershipStatus(KEY_INVITED);
         groupMemberRepository.save(membership);
         auditService.record(
             "GROUP_MEMBER_INVITED",
@@ -529,49 +532,37 @@ public class GroupController {
 
         // Send invitation email notification
         try {
-            String inviteeName = (target.getFirstName() + " " + target.getLastName()).trim();
-            String schedule = formatSchedule(group.getPreferredSchedule());
-
-            emailService.sendGroupInvitation(
-                target.getEmail(),
-                inviteeName,
-                group.getName() != null ? group.getName() : "",
-                group.getModuleCode() != null ? group.getModuleCode() : "",
-                group.getTopic() != null ? group.getTopic() : "",
-                schedule,
-                resolveOwnerName(group),
-                resolveOwnerEmail(group)
-            );
+            dispatchMemberEmail(target, group, emailService::sendGroupInvitation);
         } catch (Exception emailEx) {
             log.warn("[Invite] Failed to send invitation email to {}: {}", email, emailEx.getMessage());
         }
 
-        return ResponseEntity.ok(Map.of("invited", true, "email", email));
+        return ResponseEntity.ok(Map.of(KEY_INVITED, true, KEY_EMAIL, email));
     }
 
     @PostMapping("/{id}/members/{userId}/approve")
     public ResponseEntity<?> approveMember(@PathVariable UUID id, @PathVariable UUID userId, Authentication auth) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can approve requests"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only admins can approve requests"));
 
         StudyGroupMember membership = groupMemberRepository.findByGroupIdAndUserId(id, userId).orElse(null);
-        if (membership == null) return ResponseEntity.status(404).body(Map.of("error", "Membership not found"));
+        if (membership == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, "Membership not found"));
 
-        if ("approved".equalsIgnoreCase(membership.getMembershipStatus())) {
-            return ResponseEntity.ok(Map.of("approved", true, "alreadyApproved", true));
+        if (STATUS_APPROVED.equalsIgnoreCase(membership.getMembershipStatus())) {
+            return ResponseEntity.ok(Map.of(STATUS_APPROVED, true, "alreadyApproved", true));
         }
 
-        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, "approved");
+        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
         if (group.getMaxMembers() != null && approvedCount >= group.getMaxMembers()) {
             group.setStatus("full");
             groupRepository.save(group);
-            return ResponseEntity.badRequest().body(Map.of("error", "Group is full"));
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, MSG_GROUP_FULL));
         }
 
-        membership.setMembershipStatus("approved");
+        membership.setMembershipStatus(STATUS_APPROVED);
         groupMemberRepository.save(membership);
         refreshGroupStatus(group);
         groupRepository.save(group);
@@ -589,39 +580,24 @@ public class GroupController {
         // Send approval notification email
         try {
             User member = userRepository.findById(userId).orElse(null);
-            String memberName = member != null
-                ? ((member.getFirstName() + " " + member.getLastName()).trim())
-                : "Member";
-            String schedule = formatSchedule(group.getPreferredSchedule());
-
-            if (member != null && member.getEmail() != null) {
-                emailService.sendMemberApproved(
-                    member.getEmail(),
-                    memberName,
-                    group.getName() != null ? group.getName() : "",
-                    group.getModuleCode() != null ? group.getModuleCode() : "",
-                    group.getTopic() != null ? group.getTopic() : "",
-                    schedule,
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
-                );
-            }
+            dispatchMemberEmail(member, group, emailService::sendMemberApproved);
         } catch (Exception emailEx) {
             log.warn("[Approve] Failed to send approval email for user {} in group {}: {}", userId, id, emailEx.getMessage());
         }
-        return ResponseEntity.ok(Map.of("approved", true));
+
+        return ResponseEntity.ok(Map.of(STATUS_APPROVED, true));
     }
 
     @DeleteMapping("/{id}/members/{userId}")
     public ResponseEntity<?> removeMember(@PathVariable UUID id, @PathVariable UUID userId, Authentication auth) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can remove members"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only admins can remove members"));
 
         if (group.getCreatedBy() != null && group.getCreatedBy().equals(userId)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Use transfer ownership before removing owner"));
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Use transfer ownership before removing owner"));
         }
 
         Optional<StudyGroupMember> existing = groupMemberRepository.findByGroupIdAndUserId(id, userId);
@@ -638,7 +614,7 @@ public class GroupController {
             groupRepository.save(group);
         } catch (Exception ex) {
             log.error("[RemoveMember] DB error for group {}: {}", id, ex.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to remove member. Please try again."));
+            return ResponseEntity.status(500).body(Map.of(ERR_KEY, "Failed to remove member. Please try again."));
         }
         auditService.record(
             "GROUP_MEMBER_REMOVED",
@@ -653,23 +629,7 @@ public class GroupController {
 
         // Send rejection notification email
         try {
-            String memberName = member != null
-                ? ((member.getFirstName() + " " + member.getLastName()).trim())
-                : "Member";
-            String schedule = formatSchedule(group.getPreferredSchedule());
-
-            if (member != null && member.getEmail() != null) {
-                emailService.sendMemberRejected(
-                    member.getEmail(),
-                    memberName,
-                    group.getName() != null ? group.getName() : "",
-                    group.getModuleCode() != null ? group.getModuleCode() : "",
-                    group.getTopic() != null ? group.getTopic() : "",
-                    schedule,
-                    resolveOwnerName(group),
-                    resolveOwnerEmail(group)
-                );
-            }
+            dispatchMemberEmail(member, group, emailService::sendMemberRejected);
         } catch (Exception emailEx) {
             log.warn("[RemoveMember] Failed to send rejection email for user {} in group {}: {}", userId, id, emailEx.getMessage());
         }
@@ -679,26 +639,26 @@ public class GroupController {
     @PostMapping("/{id}/transfer-ownership")
     public ResponseEntity<?> transferOwnership(@PathVariable UUID id, Authentication auth, @RequestBody Map<String, Object> body) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isOwner(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only the current owner can transfer ownership"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isOwner(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only the current owner can transfer ownership"));
 
         UUID newOwnerId = parseUuid(asString(body.get("newOwnerUserId")));
-        if (newOwnerId == null) return ResponseEntity.badRequest().body(Map.of("error", "newOwnerUserId is required"));
+        if (newOwnerId == null) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "newOwnerUserId is required"));
 
         StudyGroupMember currentOwnerMember = groupMemberRepository.findByGroupIdAndUserId(id, actor.getId()).orElse(null);
         StudyGroupMember newOwnerMember = groupMemberRepository.findByGroupIdAndUserId(id, newOwnerId).orElse(null);
-        if (newOwnerMember == null || !"approved".equalsIgnoreCase(newOwnerMember.getMembershipStatus())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "New owner must be an approved member"));
+        if (newOwnerMember == null || !STATUS_APPROVED.equalsIgnoreCase(newOwnerMember.getMembershipStatus())) {
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "New owner must be an approved member"));
         }
 
         if (currentOwnerMember != null) {
-            currentOwnerMember.setRole("admin");
+            currentOwnerMember.setRole(ROLE_ADMIN);
             groupMemberRepository.save(currentOwnerMember);
         }
-        newOwnerMember.setRole("owner");
-        newOwnerMember.setMembershipStatus("approved");
+        newOwnerMember.setRole(ROLE_OWNER);
+        newOwnerMember.setMembershipStatus(STATUS_APPROVED);
         groupMemberRepository.save(newOwnerMember);
 
         group.setCreatedBy(newOwnerId);
@@ -719,22 +679,22 @@ public class GroupController {
     @PostMapping("/{id}/dissolve")
     public ResponseEntity<?> dissolveGroup(@PathVariable UUID id, Authentication auth) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can dissolve group"));
-        if ("dissolved".equalsIgnoreCase(group.getStatus())) return ResponseEntity.ok(Map.of("dissolved", true));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only admins can dissolve group"));
+        if (STATUS_DISSOLVED.equalsIgnoreCase(group.getStatus())) return ResponseEntity.ok(Map.of(STATUS_DISSOLVED, true));
 
         try {
-            group.setStatus("dissolved");
+            group.setStatus(STATUS_DISSOLVED);
             groupRepository.save(group);
         } catch (Exception ex) {
             log.warn("[Dissolve] JPA save failed for group {}. Retrying with SQL. Cause: {}", id, ex.getMessage());
             try {
-                jdbcTemplate.update("UPDATE study_groups SET status = ? WHERE id = ?", "dissolved", group.getId());
-            } catch (Exception fallbackEx) {
+                jdbcTemplate.update("UPDATE study_groups SET status = ? WHERE id = ?", STATUS_DISSOLVED, group.getId());
+            } catch (DataAccessException fallbackEx) {
                 log.error("[Dissolve] DB error for group {}: {}", id, fallbackEx.getMessage());
-                return ResponseEntity.status(500).body(Map.of("error", "Failed to dissolve group. Please try again."));
+                return ResponseEntity.status(500).body(Map.of(ERR_KEY, "Failed to dissolve group. Please try again."));
             }
         }
 
@@ -743,39 +703,39 @@ public class GroupController {
             String schedule = formatSchedule(group.getPreferredSchedule());
             List<StudyGroupMember> allMembers = groupMemberRepository.findByGroupId(id);
             String[] memberEmails = allMembers.stream()
-                .filter(m -> !"owner".equalsIgnoreCase(m.getRole()))
+                .filter(m -> !ROLE_OWNER.equalsIgnoreCase(m.getRole()))
                 .map(m -> userRepository.findById(m.getUserId()).map(User::getEmail).orElse(null))
                 .filter(e -> e != null && !e.isBlank())
                 .toArray(String[]::new);
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            String groupName = group.getName() != null ? group.getName() : "";
-            String moduleCodeStr = group.getModuleCode() != null ? group.getModuleCode() : "";
-            String topicStr = group.getTopic() != null ? group.getTopic() : "";
+            String groupNameStr = groupName(group);
+            String moduleCodeStr = groupModule(group);
+            String topicStr = groupTopic(group);
             dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
-                emailService.sendGroupDissolved(recipients, groupName, moduleCodeStr, topicStr, schedule, ownerName, cc));
+                emailService.sendGroupDissolved(recipients, groupNameStr, moduleCodeStr, topicStr, schedule, ownerName, cc));
         } catch (Exception emailEx) {
             log.warn("[Dissolve] Failed to send dissolution emails for group {}: {}", id, emailEx.getMessage());
         }
 
-        return ResponseEntity.ok(Map.of("dissolved", true));
+        return ResponseEntity.ok(Map.of(STATUS_DISSOLVED, true));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteGroup(@PathVariable UUID id, Authentication auth) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can delete group"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only admins can delete group"));
 
         try {
             jdbcTemplate.update("DELETE FROM study_sessions WHERE group_id = ?", id.toString());
             jdbcTemplate.update("DELETE FROM study_group_members WHERE group_id = ?", id.toString());
             jdbcTemplate.update("DELETE FROM study_groups WHERE id = ?", id.toString());
-        } catch (Exception ex) {
+        } catch (DataAccessException ex) {
             log.error("[Delete] DB error for group {}: {}", id, ex.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to delete group. Please try again."));
+            return ResponseEntity.status(500).body(Map.of(ERR_KEY, "Failed to delete group. Please try again."));
         }
         return ResponseEntity.ok(Map.of("deleted", true));
     }
@@ -783,11 +743,11 @@ public class GroupController {
     @GetMapping("/{id}/sessions")
     public ResponseEntity<?> listSessions(@PathVariable UUID id, Authentication auth) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
         if (!isMember(id, actor.getId()) && !isAdmin(group, actor.getId())) {
-            return ResponseEntity.status(403).body(Map.of("error", "Not authorized to view sessions"));
+            return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Not authorized to view sessions"));
         }
         return ResponseEntity.ok(getSessionsPayload(id));
     }
@@ -795,28 +755,28 @@ public class GroupController {
     @PostMapping("/{id}/sessions")
     public ResponseEntity<?> createSession(@PathVariable UUID id, Authentication auth, @RequestBody Map<String, Object> body) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can create sessions"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only admins can create sessions"));
 
-        String title = asString(body.get("title"));
-        String notes = asString(body.get("notes"));
-        String location = asString(body.get("location"));
-        String meetingLink = asString(body.get("meetingLink"));
-        LocalDateTime startsAt = parseDateTime(asString(body.get("startsAt")));
-        LocalDateTime endsAt = parseDateTime(asString(body.get("endsAt")));
+        String title = asString(body.get(FIELD_TITLE));
+        String notes = asString(body.get(FIELD_NOTES));
+        String location = asString(body.get(FIELD_LOCATION));
+        String meetingLink = asString(body.get(FIELD_MEETING_LINK));
+        LocalDateTime startsAt = parseDateTime(asString(body.get(FIELD_STARTS_AT)));
+        LocalDateTime endsAt = parseDateTime(asString(body.get(FIELD_ENDS_AT)));
 
-        if (title == null || title.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Session title is required"));
-        if (startsAt == null) return ResponseEntity.badRequest().body(Map.of("error", "startsAt is required in ISO datetime format"));
-        if (endsAt != null && endsAt.isBefore(startsAt)) return ResponseEntity.badRequest().body(Map.of("error", "endsAt must be after startsAt"));
+        if (title == null || title.isBlank()) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Session title is required"));
+        if (startsAt == null) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "startsAt is required in ISO datetime format"));
+        if (endsAt != null && endsAt.isBefore(startsAt)) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "endsAt must be after startsAt"));
 
-        if ("online".equalsIgnoreCase(group.getStudyMode())) {
+        if (STUDY_MODE_ONLINE.equalsIgnoreCase(group.getStudyMode())) {
             if (meetingLink == null || meetingLink.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Meeting link is required for online sessions"));
+                return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Meeting link is required for online sessions"));
             }
         } else if (location == null || location.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Location is required for in-person sessions"));
+            return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Location is required for in-person sessions"));
         }
 
         StudySession session = new StudySession();
@@ -832,7 +792,7 @@ public class GroupController {
             studySessionRepository.save(session);
         } catch (Exception ex) {
             log.error("[CreateSession] DB error for group {}: {}", id, ex.getMessage());
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to save session. Please try again."));
+            return ResponseEntity.status(500).body(Map.of(ERR_KEY, "Failed to save session. Please try again."));
         }
         auditService.record(
             "STUDY_SESSION_CREATED",
@@ -858,26 +818,26 @@ public class GroupController {
     @PutMapping("/{id}/sessions/{sessionId}")
     public ResponseEntity<?> updateSession(@PathVariable UUID id, @PathVariable UUID sessionId, Authentication auth, @RequestBody Map<String, Object> body) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can update sessions"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only admins can update sessions"));
 
         StudySession session = studySessionRepository.findById(sessionId).orElse(null);
         if (session == null || !id.equals(session.getGroupId())) {
-            return ResponseEntity.status(404).body(Map.of("error", SESSION_NOT_FOUND));
+            return ResponseEntity.status(404).body(Map.of(ERR_KEY, SESSION_NOT_FOUND));
         }
 
-        String title = firstNonBlank(asString(body.get("title")), session.getTitle());
-        String notes = body.containsKey("notes") ? asString(body.get("notes")) : session.getNotes();
-        String location = body.containsKey("location") ? asString(body.get("location")) : session.getLocation();
-        String meetingLink = body.containsKey("meetingLink") ? asString(body.get("meetingLink")) : session.getMeetingLink();
-        LocalDateTime startsAt = body.containsKey("startsAt") ? parseDateTime(asString(body.get("startsAt"))) : session.getStartsAt();
-        LocalDateTime endsAt = body.containsKey("endsAt") ? parseDateTime(asString(body.get("endsAt"))) : session.getEndsAt();
+        String title = firstNonBlank(asString(body.get(FIELD_TITLE)), session.getTitle());
+        String notes = body.containsKey(FIELD_NOTES) ? asString(body.get(FIELD_NOTES)) : session.getNotes();
+        String location = body.containsKey(FIELD_LOCATION) ? asString(body.get(FIELD_LOCATION)) : session.getLocation();
+        String meetingLink = body.containsKey(FIELD_MEETING_LINK) ? asString(body.get(FIELD_MEETING_LINK)) : session.getMeetingLink();
+        LocalDateTime startsAt = body.containsKey(FIELD_STARTS_AT) ? parseDateTime(asString(body.get(FIELD_STARTS_AT))) : session.getStartsAt();
+        LocalDateTime endsAt = body.containsKey(FIELD_ENDS_AT) ? parseDateTime(asString(body.get(FIELD_ENDS_AT))) : session.getEndsAt();
 
-        if (title == null || title.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Session title is required"));
-        if (startsAt == null) return ResponseEntity.badRequest().body(Map.of("error", "startsAt is required in ISO datetime format"));
-        if (endsAt != null && endsAt.isBefore(startsAt)) return ResponseEntity.badRequest().body(Map.of("error", "endsAt must be after startsAt"));
+        if (title == null || title.isBlank()) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Session title is required"));
+        if (startsAt == null) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "startsAt is required in ISO datetime format"));
+        if (endsAt != null && endsAt.isBefore(startsAt)) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "endsAt must be after startsAt"));
 
         session.setTitle(title);
         session.setNotes(notes);
@@ -900,14 +860,14 @@ public class GroupController {
     @DeleteMapping("/{id}/sessions/{sessionId}")
     public ResponseEntity<?> deleteSession(@PathVariable UUID id, @PathVariable UUID sessionId, Authentication auth) {
         User actor = getCurrentUser(auth);
-        if (actor == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         StudyGroup group = groupRepository.findById(id).orElse(null);
-        if (group == null) return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
-        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of("error", "Only admins can delete sessions"));
+        if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
+        if (!isAdmin(group, actor.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Only admins can delete sessions"));
 
         StudySession session = studySessionRepository.findById(sessionId).orElse(null);
         if (session == null || !id.equals(session.getGroupId())) {
-            return ResponseEntity.status(404).body(Map.of("error", SESSION_NOT_FOUND));
+            return ResponseEntity.status(404).body(Map.of(ERR_KEY, SESSION_NOT_FOUND));
         }
         // Capture session details before deletion for email
         String deletedTitle = session.getTitle();
@@ -920,7 +880,7 @@ public class GroupController {
             String[] memberEmails = getApprovedMemberEmails(group.getId());
             String ownerName = resolveOwnerName(group);
             String ownerEmail = resolveOwnerEmail(group);
-            String groupName = group.getName() != null ? group.getName() : "";
+            String groupName = groupName(group);
             dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
                 emailService.sendSessionDeleted(recipients, groupName, deletedTitle, deletedStartsAt, ownerName, cc));
         } catch (Exception emailEx) {
@@ -935,11 +895,11 @@ public class GroupController {
         User user = getCurrentUser(auth);
         StudyGroup group = groupRepository.findById(id).orElse(null);
         if (group == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "Group not found"));
+            return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
         }
-        if (user == null) return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        if (user == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
         if (!isMember(id, user.getId()) && !isAdmin(group, user.getId())) {
-            return ResponseEntity.status(403).body(Map.of("error", "Not authorized to view this group"));
+            return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Not authorized to view this group"));
         }
         return ResponseEntity.ok(buildGroupDetails(group, user));
     }
@@ -958,9 +918,9 @@ public class GroupController {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id", g.getId());
                 row.put("name", g.getName());
-                row.put("moduleCode", g.getModuleCode());
+                row.put(FIELD_MODULE_CODE, g.getModuleCode());
                 row.put("status", g.getStatus());
-                row.put("createdBy", g.getCreatedBy());
+                row.put(KEY_CREATED_BY, g.getCreatedBy());
                 row.put("createdAt", g.getCreatedAt());
                 return row;
             }).toList();
@@ -973,31 +933,35 @@ public class GroupController {
             log.error("[DbCheck] Failed to query dbo.study_groups: {}", ex.getMessage(), ex);
             return ResponseEntity.status(500).body(Map.of(
                 "table", "dbo.study_groups",
-                "error", ex.getMessage()
+                ERR_KEY, ex.getMessage()
             ));
         }
     }
 
     private User getCurrentUser(Authentication auth) {
-        if (auth == null) return null;
-        return userRepository.findByEmail(auth.getName()).orElse(null);
+        return resolveUser(auth, userRepository);
     }
 
     private boolean isOwner(StudyGroup group, UUID userId) {
         return group.getCreatedBy() != null && group.getCreatedBy().equals(userId);
     }
 
+    private boolean isRestrictedFromGroup(StudyGroup group, UUID userId) {
+        return group.getCreatedBy() != null
+            && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), userId);
+    }
+
     private boolean isAdmin(StudyGroup group, UUID userId) {
         if (isOwner(group, userId)) return true;
         StudyGroupMember membership = groupMemberRepository.findByGroupIdAndUserId(group.getId(), userId).orElse(null);
         return membership != null
-            && "approved".equalsIgnoreCase(membership.getMembershipStatus())
-            && ("owner".equalsIgnoreCase(membership.getRole()) || "admin".equalsIgnoreCase(membership.getRole()));
+            && STATUS_APPROVED.equalsIgnoreCase(membership.getMembershipStatus())
+            && (ROLE_OWNER.equalsIgnoreCase(membership.getRole()) || ROLE_ADMIN.equalsIgnoreCase(membership.getRole()));
     }
 
     private boolean isMember(UUID groupId, UUID userId) {
         StudyGroupMember membership = groupMemberRepository.findByGroupIdAndUserId(groupId, userId).orElse(null);
-        return membership != null && "approved".equalsIgnoreCase(membership.getMembershipStatus());
+        return membership != null && STATUS_APPROVED.equalsIgnoreCase(membership.getMembershipStatus());
     }
 
     private String resolveOwnerName(StudyGroup group) {
@@ -1010,17 +974,25 @@ public class GroupController {
         return owner != null ? owner.getEmail() : "";
     }
 
+    private String resolveUserName(User user, String fallback) {
+        return user != null ? (user.getFirstName() + " " + user.getLastName()).trim() : fallback;
+    }
+
+    private String groupName(StudyGroup g)   { return g.getName()       != null ? g.getName()       : ""; }
+    private String groupModule(StudyGroup g) { return g.getModuleCode() != null ? g.getModuleCode() : ""; }
+    private String groupTopic(StudyGroup g)  { return g.getTopic()      != null ? g.getTopic()      : ""; }
+
     private Map<String, Object> buildSessionResponse(StudySession session) {
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("id", session.getId().toString());
-        resp.put("groupId", session.getGroupId().toString());
-        resp.put("title", session.getTitle());
-        resp.put("notes", session.getNotes() != null ? session.getNotes() : "");
-        resp.put("startsAt", session.getStartsAt().toString());
-        resp.put("endsAt", session.getEndsAt() != null ? session.getEndsAt().toString() : null);
-        resp.put("location", session.getLocation() != null ? session.getLocation() : "");
-        resp.put("meetingLink", session.getMeetingLink() != null ? session.getMeetingLink() : "");
-        resp.put("createdBy", session.getCreatedBy().toString());
+        resp.put(KEY_GROUP_ID, session.getGroupId().toString());
+        resp.put(FIELD_TITLE, session.getTitle());
+        resp.put(FIELD_NOTES, session.getNotes() != null ? session.getNotes() : "");
+        resp.put(FIELD_STARTS_AT, session.getStartsAt() != null ? session.getStartsAt().toString() : null);
+        resp.put(FIELD_ENDS_AT, session.getEndsAt() != null ? session.getEndsAt().toString() : null);
+        resp.put(FIELD_LOCATION, session.getLocation() != null ? session.getLocation() : "");
+        resp.put(FIELD_MEETING_LINK, session.getMeetingLink() != null ? session.getMeetingLink() : "");
+        resp.put(KEY_CREATED_BY, session.getCreatedBy().toString());
         return resp;
     }
 
@@ -1030,8 +1002,8 @@ public class GroupController {
     private String[] getApprovedMemberEmails(UUID groupId) {
         List<StudyGroupMember> allMembers = groupMemberRepository.findByGroupId(groupId);
         return allMembers.stream()
-            .filter(m -> "member".equalsIgnoreCase(m.getRole())
-                      && "approved".equalsIgnoreCase(m.getMembershipStatus()))
+            .filter(m -> ROLE_MEMBER.equalsIgnoreCase(m.getRole())
+                      && STATUS_APPROVED.equalsIgnoreCase(m.getMembershipStatus()))
             .map(m -> userRepository.findById(m.getUserId()).map(User::getEmail).orElse(null))
             .filter(e -> e != null && !e.isBlank())
             .toArray(String[]::new);
@@ -1042,6 +1014,19 @@ public class GroupController {
         void send(String[] recipients, String groupName, String sessionTitle,
                   String startsAt, String endsAt, String location, String meetingLink,
                   String ownerName, String cc);
+    }
+
+    @FunctionalInterface
+    private interface MemberEmailFn {
+        void send(String email, String name, String groupName, String moduleCode,
+                  String topic, String schedule, String ownerName, String ownerEmail);
+    }
+
+    private void dispatchMemberEmail(User member, StudyGroup group, MemberEmailFn fn) {
+        if (member == null || member.getEmail() == null) return;
+        fn.send(member.getEmail(), resolveUserName(member, "Member"),
+                groupName(group), groupModule(group), groupTopic(group),
+                formatSchedule(group.getPreferredSchedule()), resolveOwnerName(group), resolveOwnerEmail(group));
     }
 
     private void dispatchEmail(String[] members, String ownerEmail, BiConsumer<String[], String> send) {
@@ -1056,7 +1041,7 @@ public class GroupController {
         String[] memberEmails = getApprovedMemberEmails(group.getId());
         String ownerName = resolveOwnerName(group);
         String ownerEmail = resolveOwnerEmail(group);
-        String groupName = group.getName() != null ? group.getName() : "";
+        String groupName = groupName(group);
         String endsAt = session.getEndsAt() != null ? formatSchedule(session.getEndsAt()) : null;
         String startsAt = formatSchedule(session.getStartsAt());
         dispatchEmail(memberEmails, ownerEmail, (recipients, cc) ->
@@ -1074,13 +1059,13 @@ public class GroupController {
     }
 
     private void refreshGroupStatus(StudyGroup group) {
-        if ("dissolved".equalsIgnoreCase(group.getStatus())) return;
-        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), "approved");
+        if (STATUS_DISSOLVED.equalsIgnoreCase(group.getStatus())) return;
+        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), STATUS_APPROVED);
         Short maxMembers = group.getMaxMembers();
         if (maxMembers != null && approvedCount >= maxMembers) {
             group.setStatus("full");
         } else {
-            group.setStatus("active");
+            group.setStatus(STATUS_ACTIVE);
         }
     }
 
@@ -1096,14 +1081,14 @@ public class GroupController {
         if (moduleCode == null || moduleCode.isBlank()) return "Module/subject is required";
         if (description == null || description.isBlank()) return "Description is required";
         if (preferredSchedule == null) return "Preferred schedule is required";
-        if (!"online".equalsIgnoreCase(studyMode) && !"in-person".equalsIgnoreCase(studyMode) && !"hybrid".equalsIgnoreCase(studyMode)) {
+        if (!STUDY_MODE_ONLINE.equalsIgnoreCase(studyMode) && !STUDY_MODE_IN_PERSON.equalsIgnoreCase(studyMode) && !STUDY_MODE_HYBRID.equalsIgnoreCase(studyMode)) {
             return "Study mode must be one of: online, in-person, hybrid";
         }
-        if (("in-person".equalsIgnoreCase(studyMode) || "hybrid".equalsIgnoreCase(studyMode))
+        if ((STUDY_MODE_IN_PERSON.equalsIgnoreCase(studyMode) || STUDY_MODE_HYBRID.equalsIgnoreCase(studyMode))
             && (location == null || location.isBlank())) {
             return "Location is required for in-person/hybrid groups";
         }
-        if (("online".equalsIgnoreCase(studyMode) || "hybrid".equalsIgnoreCase(studyMode))
+        if ((STUDY_MODE_ONLINE.equalsIgnoreCase(studyMode) || STUDY_MODE_HYBRID.equalsIgnoreCase(studyMode))
             && (meetingLink == null || meetingLink.isBlank())) {
             return "Meeting link is required for online/hybrid groups";
         }
@@ -1112,8 +1097,8 @@ public class GroupController {
     }
 
     private Map<String, Object> buildGroupSummary(StudyGroup group, User currentUser) {
-        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), "approved");
-        long pendingCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), "pending");
+        long approvedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), STATUS_APPROVED);
+        long pendingCount = groupMemberRepository.countByGroupIdAndMembershipStatus(group.getId(), STATUS_PENDING);
         StudyGroupMember currentMembership = currentUser == null
             ? null
             : groupMemberRepository.findByGroupIdAndUserId(group.getId(), currentUser.getId()).orElse(null);
@@ -1129,23 +1114,23 @@ public class GroupController {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", group.getId());
         row.put("name", firstNonBlank(group.getName(), group.getTopic(), "Study Group"));
-        row.put("moduleCode", firstNonBlank(group.getModuleCode(), group.getTopic(), "General"));
-        row.put("topic", group.getTopic());
-        row.put("description", group.getDescription());
-        row.put("studyMode", group.getStudyMode());
-        row.put("location", group.getLocation());
-        row.put("meetingLink", group.getMeetingLink());
-        row.put("preferredSchedule", group.getPreferredSchedule());
-        row.put("createdBy", group.getCreatedBy());
+        row.put(FIELD_MODULE_CODE, firstNonBlank(group.getModuleCode(), group.getTopic(), "General"));
+        row.put(FIELD_TOPIC, group.getTopic());
+        row.put(FIELD_DESCRIPTION, group.getDescription());
+        row.put(FIELD_STUDY_MODE, group.getStudyMode());
+        row.put(FIELD_LOCATION, group.getLocation());
+        row.put(FIELD_MEETING_LINK, group.getMeetingLink());
+        row.put(FIELD_PREFERRED_SCHEDULE, group.getPreferredSchedule());
+        row.put(KEY_CREATED_BY, group.getCreatedBy());
         row.put("ownerName", owner == null ? null : (owner.getFirstName() + " " + owner.getLastName()).trim());
-        row.put("maxMembers", group.getMaxMembers());
+        row.put(FIELD_MAX_MEMBERS, group.getMaxMembers());
         row.put("status", group.getStatus());
-        row.put("approvalRequired", Boolean.TRUE.equals(group.getApprovalRequired()));
+        row.put(FIELD_APPROVAL_REQUIRED, Boolean.TRUE.equals(group.getApprovalRequired()));
         row.put("createdAt", group.getCreatedAt());
-        row.put("memberCount", approvedCount);
+        row.put(KEY_MEMBER_COUNT, approvedCount);
         row.put("pendingCount", pendingCount);
-        row.put("joined", currentMembership != null && "approved".equalsIgnoreCase(currentMembership.getMembershipStatus()));
-        row.put("membershipStatus", currentMembership != null ? currentMembership.getMembershipStatus() : null);
+        row.put(KEY_JOINED, currentMembership != null && STATUS_APPROVED.equalsIgnoreCase(currentMembership.getMembershipStatus()));
+        row.put(KEY_MEMBERSHIP_STATUS, currentMembership != null ? currentMembership.getMembershipStatus() : null);
         row.put("isAdmin", isAdmin);
         return row;
     }
@@ -1172,33 +1157,20 @@ public class GroupController {
         boolean admin = false;
         if (currentUser != null) {
             UUID uid = currentUser.getId();
-            if (isOwner(group, uid)) {
-                admin = true;
-            } else if (currentMembership != null
-                    && "approved".equalsIgnoreCase(currentMembership.getMembershipStatus())
-                    && ("owner".equalsIgnoreCase(currentMembership.getRole())
-                        || "admin".equalsIgnoreCase(currentMembership.getRole()))) {
-                admin = true;
-            }
+            admin = isOwner(group, uid)
+                || (currentMembership != null
+                    && STATUS_APPROVED.equalsIgnoreCase(currentMembership.getMembershipStatus())
+                    && (ROLE_OWNER.equalsIgnoreCase(currentMembership.getRole())
+                        || ROLE_ADMIN.equalsIgnoreCase(currentMembership.getRole())));
         }
 
         return buildGroupRow(group, owner, approvedCount, pendingCount, currentMembership, admin);
     }
 
     private List<Map<String, Object>> getSessionsPayload(UUID groupId) {
-        return studySessionRepository.findByGroupIdOrderByStartsAtAsc(groupId).stream().map(s -> {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", s.getId().toString());
-            row.put("groupId", s.getGroupId().toString());
-            row.put("title", s.getTitle());
-            row.put("notes", s.getNotes() != null ? s.getNotes() : "");
-            row.put("startsAt", s.getStartsAt() != null ? s.getStartsAt().toString() : null);
-            row.put("endsAt", s.getEndsAt() != null ? s.getEndsAt().toString() : null);
-            row.put("location", s.getLocation() != null ? s.getLocation() : "");
-            row.put("meetingLink", s.getMeetingLink() != null ? s.getMeetingLink() : "");
-            row.put("createdBy", s.getCreatedBy().toString());
-            return row;
-        }).toList();
+        return studySessionRepository.findByGroupIdOrderByStartsAtAsc(groupId).stream()
+            .map(this::buildSessionResponse)
+            .toList();
     }
 
     private List<Map<String, Object>> getMembersPayload(UUID groupId) {
@@ -1209,9 +1181,9 @@ public class GroupController {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("userId", member.getUserId());
             row.put("role", member.getRole());
-            row.put("membershipStatus", member.getMembershipStatus());
+            row.put(KEY_MEMBERSHIP_STATUS, member.getMembershipStatus());
             row.put("joinedAt", member.getJoinedAt());
-            row.put("email", mUser != null ? mUser.getEmail() : null);
+            row.put(KEY_EMAIL, mUser != null ? mUser.getEmail() : null);
             row.put("firstName", mUser != null ? mUser.getFirstName() : null);
             row.put("lastName", mUser != null ? mUser.getLastName() : null);
             payload.add(row);
@@ -1243,7 +1215,7 @@ public class GroupController {
 
     private void saveStudyGroupFallback(StudyGroup group, LocalDateTime preferredSchedule) {
         if (group.getId() == null) group.setId(UUID.randomUUID());
-        if (group.getStatus() == null) group.setStatus("active");
+        if (group.getStatus() == null) group.setStatus(STATUS_ACTIVE);
         if (group.getCreatedAt() == null) group.setCreatedAt(LocalDateTime.now());
 
         jdbcTemplate.update(
@@ -1273,7 +1245,7 @@ public class GroupController {
     public ResponseEntity<?> handleException(Exception ex) {
         log.error("[GroupController] Unhandled exception", ex);
         return ResponseEntity.status(500).body(Map.of(
-            "error", ex.getMessage() != null ? ex.getMessage() : "Internal server error"
+            ERR_KEY, ex.getMessage() != null ? ex.getMessage() : "Internal server error"
         ));
     }
 }
