@@ -1,5 +1,10 @@
 package mtech.swe5006.peerconnect.api;
 
+import org.springframework.security.core.Authentication;
+
+import mtech.swe5006.peerconnect.data.sql.User;
+import mtech.swe5006.peerconnect.data.sql.UserRepository;
+
 /**
  * Shared parsing/coercion helpers used by multiple controllers.
  * Kept package-accessible so callers can use {@code import static}.
@@ -7,6 +12,11 @@ package mtech.swe5006.peerconnect.api;
 final class ControllerUtils {
 
     private ControllerUtils() {}
+
+    static User resolveUser(Authentication auth, UserRepository userRepository) {
+        if (auth == null) return null;
+        return userRepository.findByEmail(auth.getName()).orElse(null);
+    }
 
     static String asString(Object value) {
         if (value == null) return null;
