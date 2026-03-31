@@ -23,6 +23,94 @@ public class EmailService {
     }
 
     /**
+     * Send a confirmation email to a tutor after creating a tutoring class.
+     */
+    public void sendTutoringClassCreated(String tutorEmail, String tutorName,
+                                         String classTitle, String moduleCode,
+                                         String topic, String schedule,
+                                         String mode, String location,
+                                         String meetingLink) {
+        if (isBlockedEmail(tutorEmail)) { log.info("Skipping email to blocked address: {}", tutorEmail); return; }
+        SimpleMailMessage msg = prepareMsg(null, tutorEmail);
+        msg.setSubject("[PeerConnectSG] Peer Tutor Group Created: " + classTitle);
+        msg.setText(
+            "Dear " + tutorName + ",\n\n"
+            + "Your peer tutor group has been created successfully on PeerConnectSG.\n\n"
+            + tutoringClassInfoBlock(classTitle, moduleCode, topic, schedule, mode, location, meetingLink)
+            + "You can now manage your group and welcome tutees from the platform.\n\n"
+            + SYS_FOOTER
+        );
+        mailSender.send(msg);
+    }
+
+    /**
+     * Send a confirmation email when a tutee joins a tutoring class.
+     */
+    public void sendTutoringEnrollmentConfirmed(String studentEmail, String studentName,
+                                                String classTitle, String moduleCode,
+                                                String topic, String schedule,
+                                                String tutorName, String tutorEmail,
+                                                String mode, String location,
+                                                String meetingLink) {
+        if (isBlockedEmail(studentEmail)) { log.info("Skipping email to blocked address: {}", studentEmail); return; }
+        SimpleMailMessage msg = prepareMsg(tutorEmail, studentEmail);
+        msg.setSubject("[PeerConnectSG] Joined Peer Tutor Group: " + classTitle);
+        msg.setText(
+            "Dear " + studentName + ",\n\n"
+            + "You have successfully joined the following peer tutor group on PeerConnectSG:\n\n"
+            + tutoringClassInfoBlock(classTitle, moduleCode, topic, schedule, mode, location, meetingLink)
+            + "Tutor:            " + tutorName + "\n\n"
+            + "Please log in to PeerConnectSG to view the latest class details and updates.\n\n"
+            + SYS_FOOTER
+        );
+        mailSender.send(msg);
+    }
+
+    /**
+     * Notify a tutor when a tutee leaves a tutoring class.
+     */
+    public void sendTutoringStudentLeft(String tutorEmail, String studentEmail,
+                                        String studentName, String classTitle,
+                                        String moduleCode, String topic,
+                                        String schedule, String mode,
+                                        String location, String meetingLink) {
+        if (isBlockedEmail(tutorEmail)) { log.info("Skipping email to blocked address: {}", tutorEmail); return; }
+        SimpleMailMessage msg = prepareMsg(studentEmail, tutorEmail);
+        msg.setSubject("[PeerConnectSG] Tutee Left Peer Tutor Group: " + classTitle);
+        msg.setText(
+            "Dear Tutor,\n\n"
+            + studentName + " has left your peer tutor group on PeerConnectSG.\n\n"
+            + tutoringClassInfoBlock(classTitle, moduleCode, topic, schedule, mode, location, meetingLink)
+            + "This is a notification for your records.\n\n"
+            + SYS_FOOTER
+        );
+        mailSender.send(msg);
+    }
+
+    /**
+     * Notify enrolled tutees when a tutoring class is deleted by the tutor.
+     */
+    public void sendTutoringClassDeleted(String[] studentEmails, String classTitle,
+                                         String moduleCode, String topic,
+                                         String schedule, String tutorName,
+                                         String tutorEmail, String mode,
+                                         String location, String meetingLink) {
+        studentEmails = java.util.Arrays.stream(studentEmails).filter(e -> !isBlockedEmail(e)).toArray(String[]::new);
+        if (studentEmails.length == 0) { log.info("Skipping tutoring-class-deleted email - all recipients blocked"); return; }
+        SimpleMailMessage msg = prepareMsg(tutorEmail, studentEmails);
+        msg.setSubject("[PeerConnectSG] Peer Tutor Group Deleted: " + classTitle);
+        msg.setText(
+            "Dear Student,\n\n"
+            + "The following peer tutor group has been deleted and is no longer available on PeerConnectSG:\n\n"
+            + tutoringClassInfoBlock(classTitle, moduleCode, topic, schedule, mode, location, meetingLink)
+            + "Tutor:            " + tutorName + "\n\n"
+            + "You are welcome to browse and join other peer tutor groups on the platform.\n\n"
+            + SYS_FOOTER
+        );
+        mailSender.send(msg);
+    }
+
+    /**
      * Notify owner when a user joins a group.
      */
     public void sendUserJoinedGroup(String ownerEmail, String userEmail, String userName, String groupName, String moduleSubject, String topic, String preferredSchedule) {
@@ -299,6 +387,19 @@ public class EmailService {
             + "    Meeting Link:  " + (meetingLink != null && !meetingLink.isBlank() ? meetingLink : "N/A") + "\n\n";
     }
 
+    /** Returns the tutoring class details block (ends with a double newline). */
+    private String tutoringClassInfoBlock(String classTitle, String moduleCode, String topic,
+                                          String schedule, String mode, String location,
+                                          String meetingLink) {
+        return "    Class Title:    " + classTitle + "\n"
+            + "    Module Code:    " + moduleCode + "\n"
+            + "    Topic:          " + (topic != null && !topic.isBlank() ? topic : "N/A") + "\n"
+            + "    Schedule:       " + schedule + "\n"
+            + "    Mode:           " + (mode != null && !mode.isBlank() ? mode : "N/A") + "\n"
+            + "    Location:       " + (location != null && !location.isBlank() ? location : "N/A") + "\n"
+            + "    Meeting Link:   " + (meetingLink != null && !meetingLink.isBlank() ? meetingLink : "N/A") + "\n\n";
+    }
+
     /** Returns "Regards, <owner> / Group Owner" followed by the system footer. */
     private String regardsOwnerFooter(String ownerName) {
         return "Regards,\n" + ownerName + "\nGroup Owner\n\n" + SYS_FOOTER;
@@ -306,6 +407,7 @@ public class EmailService {
 
     /** Checks if the given email is in a blocked domain. */
     private boolean isBlockedEmail(String email) {
+        if (email == null || email.isBlank() || !email.contains("@")) return false;
         String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
         return BLOCKED_DOMAINS.contains(domain);
     }

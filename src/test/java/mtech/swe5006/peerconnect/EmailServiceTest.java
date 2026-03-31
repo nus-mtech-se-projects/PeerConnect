@@ -33,6 +33,116 @@ class EmailServiceTest {
     }
 
     @Nested
+    @DisplayName("sendTutoringClassCreated")
+    class TutoringClassCreated {
+
+        @Test
+        @DisplayName("sends class-created confirmation to the tutor")
+        void sendsCreatedEmail() {
+            emailService.sendTutoringClassCreated(
+                "alice@u.nus.edu", "Alice Tan",
+                "Advanced Java", "CS5000", "Concurrency",
+                "Fridays 6pm", "online", null, "https://zoom.us/java"
+            );
+
+            verify(mailSender).send(msgCaptor.capture());
+            SimpleMailMessage msg = msgCaptor.getValue();
+
+            assertThat(msg.getTo()).containsExactly("alice@u.nus.edu");
+            assertThat(msg.getCc()).isNull();
+            assertThat(msg.getSubject()).contains("Peer Tutor Group Created");
+            assertThat(msg.getSubject()).contains("Advanced Java");
+            assertThat(msg.getText()).contains("Alice Tan");
+            assertThat(msg.getText()).contains("CS5000");
+            assertThat(msg.getText()).contains("Concurrency");
+            assertThat(msg.getText()).contains("Fridays 6pm");
+            assertThat(msg.getFrom()).isEqualTo("peerconnectsg@gmail.com");
+        }
+    }
+
+    @Nested
+    @DisplayName("sendTutoringEnrollmentConfirmed")
+    class TutoringEnrollmentConfirmed {
+
+        @Test
+        @DisplayName("sends enrollment confirmation to the tutee and cc's the tutor")
+        void sendsEnrollmentEmail() {
+            emailService.sendTutoringEnrollmentConfirmed(
+                "bob@u.nus.edu", "Bob Lim",
+                "Advanced Java", "CS5000", "Concurrency",
+                "Fridays 6pm", "Alice Tan", "alice@u.nus.edu",
+                "online", null, "https://zoom.us/java"
+            );
+
+            verify(mailSender).send(msgCaptor.capture());
+            SimpleMailMessage msg = msgCaptor.getValue();
+
+            assertThat(msg.getTo()).containsExactly("bob@u.nus.edu");
+            assertThat(msg.getCc()).containsExactly("alice@u.nus.edu");
+            assertThat(msg.getSubject()).contains("Joined Peer Tutor Group");
+            assertThat(msg.getSubject()).contains("Advanced Java");
+            assertThat(msg.getText()).contains("Bob Lim");
+            assertThat(msg.getText()).contains("Alice Tan");
+            assertThat(msg.getText()).contains("CS5000");
+            assertThat(msg.getFrom()).isEqualTo("peerconnectsg@gmail.com");
+        }
+    }
+
+    @Nested
+    @DisplayName("sendTutoringStudentLeft")
+    class TutoringStudentLeft {
+
+        @Test
+        @DisplayName("sends leave notification to the tutor and cc's the student")
+        void sendsLeaveEmail() {
+            emailService.sendTutoringStudentLeft(
+                "alice@u.nus.edu", "bob@u.nus.edu",
+                "Bob Lim", "Advanced Java", "CS5000",
+                "Concurrency", "Fridays 6pm", "online",
+                null, "https://zoom.us/java"
+            );
+
+            verify(mailSender).send(msgCaptor.capture());
+            SimpleMailMessage msg = msgCaptor.getValue();
+
+            assertThat(msg.getTo()).containsExactly("alice@u.nus.edu");
+            assertThat(msg.getCc()).containsExactly("bob@u.nus.edu");
+            assertThat(msg.getSubject()).contains("Tutee Left Peer Tutor Group");
+            assertThat(msg.getSubject()).contains("Advanced Java");
+            assertThat(msg.getText()).contains("Bob Lim");
+            assertThat(msg.getText()).contains("CS5000");
+            assertThat(msg.getFrom()).isEqualTo("peerconnectsg@gmail.com");
+        }
+    }
+
+    @Nested
+    @DisplayName("sendTutoringClassDeleted")
+    class TutoringClassDeleted {
+
+        @Test
+        @DisplayName("sends class deletion notice to enrolled students and cc's the tutor")
+        void sendsDeletedEmail() {
+            emailService.sendTutoringClassDeleted(
+                new String[]{"bob@u.nus.edu"},
+                "Advanced Java", "CS5000", "Concurrency",
+                "Fridays 6pm", "Alice Tan", "alice@u.nus.edu",
+                "online", null, "https://zoom.us/java"
+            );
+
+            verify(mailSender).send(msgCaptor.capture());
+            SimpleMailMessage msg = msgCaptor.getValue();
+
+            assertThat(msg.getTo()).containsExactly("bob@u.nus.edu");
+            assertThat(msg.getCc()).containsExactly("alice@u.nus.edu");
+            assertThat(msg.getSubject()).contains("Peer Tutor Group Deleted");
+            assertThat(msg.getSubject()).contains("Advanced Java");
+            assertThat(msg.getText()).contains("Alice Tan");
+            assertThat(msg.getText()).contains("CS5000");
+            assertThat(msg.getFrom()).isEqualTo("peerconnectsg@gmail.com");
+        }
+    }
+
+    @Nested
     @DisplayName("sendMemberApproved")
     class MemberApproved {
 

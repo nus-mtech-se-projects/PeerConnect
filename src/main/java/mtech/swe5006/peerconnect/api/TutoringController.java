@@ -1,6 +1,7 @@
 package mtech.swe5006.peerconnect.api;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import mtech.swe5006.peerconnect.data.sql.TutoringEnrollment;
 import mtech.swe5006.peerconnect.data.sql.TutoringEnrollmentRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.service.EmailService;
 
 @RestController
 @RequestMapping("/api/tutoring")
@@ -43,17 +45,20 @@ public class TutoringController {
     private final UserRepository userRepository;
     private final PeerFeedbackRepository peerFeedbackRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final EmailService emailService;
 
     public TutoringController(TutoringClassRepository tutoringClassRepository,
                               TutoringEnrollmentRepository tutoringEnrollmentRepository,
                               UserRepository userRepository,
                               PeerFeedbackRepository peerFeedbackRepository,
-                              JdbcTemplate jdbcTemplate) {
+                              JdbcTemplate jdbcTemplate,
+                              EmailService emailService) {
         this.tutoringClassRepository = tutoringClassRepository;
         this.tutoringEnrollmentRepository = tutoringEnrollmentRepository;
         this.userRepository = userRepository;
         this.peerFeedbackRepository = peerFeedbackRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.emailService = emailService;
     }
 
     @GetMapping("/classes")
@@ -117,6 +122,22 @@ public class TutoringController {
                 return ResponseEntity.status(500).body(Map.of("error", "Failed to save tutoring class: " + fallbackEx.getMessage()));
             }
         }
+
+        try {
+            emailService.sendTutoringClassCreated(
+                currentUser.getEmail(),
+                displayName(currentUser),
+                tutoringClass.getTitle(),
+                tutoringClass.getModuleCode(),
+                tutoringClass.getTopic(),
+                tutoringClass.getSchedule(),
+                tutoringClass.getMode(),
+                tutoringClass.getLocation(),
+                tutoringClass.getMeetingLink()
+            );
+        } catch (Exception emailEx) {
+            log.warn("[CreateTutoringClass] Failed to send class-created email for class {}: {}", tutoringClass.getId(), emailEx.getMessage());
+        }
         return ResponseEntity.ok(buildClassPayload(tutoringClass, currentUser));
     }
 
@@ -135,9 +156,28 @@ public class TutoringController {
             return ResponseEntity.status(403).body(Map.of("error", "Not authorized to delete this tutoring class"));
         }
 
+        List<String> enrolledStudentEmails = getEnrolledStudentEmails(id);
+
         peerFeedbackRepository.deleteByPeerTutorGroupId(id);
         tutoringEnrollmentRepository.deleteByClassId(id);
         tutoringClassRepository.delete(tutoringClass);
+
+        try {
+            emailService.sendTutoringClassDeleted(
+                enrolledStudentEmails.toArray(String[]::new),
+                tutoringClass.getTitle(),
+                tutoringClass.getModuleCode(),
+                tutoringClass.getTopic(),
+                tutoringClass.getSchedule(),
+                displayName(currentUser),
+                currentUser.getEmail(),
+                tutoringClass.getMode(),
+                tutoringClass.getLocation(),
+                tutoringClass.getMeetingLink()
+            );
+        } catch (Exception emailEx) {
+            log.warn("[DeleteTutoringClass] Failed to send class-deleted email for class {}: {}", id, emailEx.getMessage());
+        }
         return ResponseEntity.ok(Map.of("deleted", true));
     }
 
@@ -171,6 +211,25 @@ public class TutoringController {
         enrollment.setUserId(currentUser.getId());
         tutoringEnrollmentRepository.save(enrollment);
 
+        try {
+            User tutor = userRepository.findById(tutoringClass.getCreatedBy()).orElse(null);
+            emailService.sendTutoringEnrollmentConfirmed(
+                currentUser.getEmail(),
+                displayName(currentUser),
+                tutoringClass.getTitle(),
+                tutoringClass.getModuleCode(),
+                tutoringClass.getTopic(),
+                tutoringClass.getSchedule(),
+                displayName(tutor),
+                tutor != null ? tutor.getEmail() : null,
+                tutoringClass.getMode(),
+                tutoringClass.getLocation(),
+                tutoringClass.getMeetingLink()
+            );
+        } catch (Exception emailEx) {
+            log.warn("[EnrollTutoringClass] Failed to send enrollment email for class {}: {}", id, emailEx.getMessage());
+        }
+
         return ResponseEntity.ok(Map.of(
             "enrolled", true,
             "enrolledCount", enrolledCount + 1
@@ -199,6 +258,25 @@ public class TutoringController {
 
         long currentCount = tutoringEnrollmentRepository.countByClassId(id);
         tutoringEnrollmentRepository.deleteByClassIdAndUserId(id, currentUser.getId());
+
+        try {
+            User tutor = userRepository.findById(tutoringClass.getCreatedBy()).orElse(null);
+            emailService.sendTutoringStudentLeft(
+                tutor != null ? tutor.getEmail() : null,
+                currentUser.getEmail(),
+                displayName(currentUser),
+                tutoringClass.getTitle(),
+                tutoringClass.getModuleCode(),
+                tutoringClass.getTopic(),
+                tutoringClass.getSchedule(),
+                tutoringClass.getMode(),
+                tutoringClass.getLocation(),
+                tutoringClass.getMeetingLink()
+            );
+        } catch (Exception emailEx) {
+            log.warn("[LeaveTutoringClass] Failed to send leave email for class {}: {}", id, emailEx.getMessage());
+        }
+
         long remaining = Math.max(0, currentCount - 1);
         return ResponseEntity.ok(Map.of(
             "enrolled", false,
@@ -377,6 +455,17 @@ public class TutoringController {
         if (user == null) return null;
         String fullName = (firstNonBlank(user.getFirstName(), "") + " " + firstNonBlank(user.getLastName(), "")).trim();
         return fullName.isEmpty() ? user.getEmail() : fullName;
+    }
+
+    private List<String> getEnrolledStudentEmails(UUID classId) {
+        List<String> emails = new ArrayList<>();
+        for (TutoringEnrollment enrollment : tutoringEnrollmentRepository.findByClassId(classId)) {
+            User student = userRepository.findById(enrollment.getUserId()).orElse(null);
+            if (student != null && student.getEmail() != null && !student.getEmail().isBlank()) {
+                emails.add(student.getEmail());
+            }
+        }
+        return emails;
     }
 
     private String validateClassInput(String title,

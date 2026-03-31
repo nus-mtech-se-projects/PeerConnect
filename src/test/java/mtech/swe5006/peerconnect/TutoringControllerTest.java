@@ -2,6 +2,7 @@ package mtech.swe5006.peerconnect;
 
 import mtech.swe5006.peerconnect.api.TutoringController;
 import mtech.swe5006.peerconnect.data.sql.*;
+import mtech.swe5006.peerconnect.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -12,6 +13,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 
 import java.util.*;
@@ -31,6 +33,10 @@ class TutoringControllerTest {
     private UserRepository userRepository;
     @Mock
     private PeerFeedbackRepository peerFeedbackRepository;
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+    @Mock
+    private EmailService emailService;
 
     @InjectMocks
     private TutoringController controller;
@@ -167,6 +173,17 @@ class TutoringControllerTest {
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("title")).isEqualTo("Advanced Java");
             verify(tutoringClassRepository).save(any());
+            verify(emailService).sendTutoringClassCreated(
+                eq("alice@u.nus.edu"),
+                eq("Alice Tan"),
+                eq("Advanced Java"),
+                eq("CS5000"),
+                isNull(),
+                eq("Fridays 6pm"),
+                eq("online"),
+                isNull(),
+                eq("https://zoom.us/java")
+            );
         }
 
         @Test
@@ -176,6 +193,7 @@ class TutoringControllerTest {
             ResponseEntity<?> res = controller.createClass(authFor(alice), body);
             assertThat(res.getStatusCode().value()).isEqualTo(400);
             assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Class title is required");
+            verify(emailService, never()).sendTutoringClassCreated(any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -193,6 +211,7 @@ class TutoringControllerTest {
             when(userRepository.findByEmail("nobody@u.nus.edu")).thenReturn(Optional.empty());
             ResponseEntity<?> res = controller.createClass(unknownAuth, validCreateBody());
             assertThat(res.getStatusCode().value()).isEqualTo(404);
+            verify(emailService, never()).sendTutoringClassCreated(any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
 
         private Map<String, Object> validCreateBody() {
@@ -227,12 +246,31 @@ class TutoringControllerTest {
 
         @Test
         void creatorCanDeleteClass() {
+            TutoringEnrollment enrollment = new TutoringEnrollment();
+            enrollment.setClassId(classId);
+            enrollment.setUserId(bob.getId());
+
+            when(tutoringEnrollmentRepository.findByClassId(classId)).thenReturn(List.of(enrollment));
+            when(userRepository.findById(bob.getId())).thenReturn(Optional.of(bob));
+
             ResponseEntity<?> res = controller.deleteClass(classId, authFor(alice));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("deleted")).isEqualTo(true);
             verify(tutoringClassRepository).delete(tutoringClass);
             verify(tutoringEnrollmentRepository).deleteByClassId(classId);
             verify(peerFeedbackRepository).deleteByPeerTutorGroupId(classId);
+            verify(emailService).sendTutoringClassDeleted(
+                aryEq(new String[]{"bob@u.nus.edu"}),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq("Alice Tan"),
+                eq("alice@u.nus.edu"),
+                isNull(),
+                isNull(),
+                isNull()
+            );
         }
 
         @Test
@@ -240,6 +278,7 @@ class TutoringControllerTest {
             ResponseEntity<?> res = controller.deleteClass(classId, authFor(bob));
             assertThat(res.getStatusCode().value()).isEqualTo(403);
             verify(tutoringClassRepository, never()).delete(any());
+            verify(emailService, never()).sendTutoringClassDeleted(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -248,6 +287,7 @@ class TutoringControllerTest {
             when(tutoringClassRepository.findById(unknownId)).thenReturn(Optional.empty());
             ResponseEntity<?> res = controller.deleteClass(unknownId, authFor(alice));
             assertThat(res.getStatusCode().value()).isEqualTo(404);
+            verify(emailService, never()).sendTutoringClassDeleted(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
     }
 
@@ -275,11 +315,25 @@ class TutoringControllerTest {
             when(tutoringEnrollmentRepository.findByClassIdAndUserId(classId, alice.getId()))
                 .thenReturn(Optional.empty());
             when(tutoringEnrollmentRepository.countByClassId(classId)).thenReturn(2L);
+            when(userRepository.findById(bob.getId())).thenReturn(Optional.of(bob));
 
             ResponseEntity<?> res = controller.enroll(classId, authFor(alice));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("enrolled")).isEqualTo(true);
             verify(tutoringEnrollmentRepository).save(any(TutoringEnrollment.class));
+            verify(emailService).sendTutoringEnrollmentConfirmed(
+                eq("alice@u.nus.edu"),
+                eq("Alice Tan"),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq("Bob Lim"),
+                eq("bob@u.nus.edu"),
+                isNull(),
+                isNull(),
+                isNull()
+            );
         }
 
         @Test
@@ -292,6 +346,7 @@ class TutoringControllerTest {
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("alreadyEnrolled")).isEqualTo(true);
             verify(tutoringEnrollmentRepository, never()).save(any());
+            verify(emailService, never()).sendTutoringEnrollmentConfirmed(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -299,6 +354,7 @@ class TutoringControllerTest {
             ResponseEntity<?> res = controller.enroll(classId, authFor(bob));
             assertThat(res.getStatusCode().value()).isEqualTo(400);
             assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Tutor cannot enroll in their own class");
+            verify(emailService, never()).sendTutoringEnrollmentConfirmed(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -310,6 +366,7 @@ class TutoringControllerTest {
             ResponseEntity<?> res = controller.enroll(classId, authFor(alice));
             assertThat(res.getStatusCode().value()).isEqualTo(400);
             assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Tutoring class is full");
+            verify(emailService, never()).sendTutoringEnrollmentConfirmed(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
     }
 
@@ -429,6 +486,7 @@ class TutoringControllerTest {
             when(tutoringEnrollmentRepository.findByClassIdAndUserId(classId, alice.getId()))
                 .thenReturn(Optional.of(enrollment));
             when(tutoringEnrollmentRepository.countByClassId(classId)).thenReturn(3L);
+            when(userRepository.findById(bob.getId())).thenReturn(Optional.of(bob));
 
             ResponseEntity<?> response = controller.leave(classId, authFor(alice));
 
@@ -437,6 +495,18 @@ class TutoringControllerTest {
             assertThat(payload.get("enrolled")).isEqualTo(false);
             assertThat(payload.get("enrolledCount")).isEqualTo(2L);
             verify(tutoringEnrollmentRepository).deleteByClassIdAndUserId(classId, alice.getId());
+            verify(emailService).sendTutoringStudentLeft(
+                eq("bob@u.nus.edu"),
+                eq("alice@u.nus.edu"),
+                eq("Alice Tan"),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull()
+            );
         }
 
         @Test
@@ -449,6 +519,7 @@ class TutoringControllerTest {
             assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(response.getBody()).isEqualTo(Map.of("alreadyLeft", true));
             verify(tutoringEnrollmentRepository, never()).deleteByClassIdAndUserId(any(), any());
+            verify(emailService, never()).sendTutoringStudentLeft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -460,6 +531,7 @@ class TutoringControllerTest {
             assertThat(response.getStatusCode().value()).isEqualTo(400);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "Tutor cannot leave their own class"));
             verify(tutoringEnrollmentRepository, never()).deleteByClassIdAndUserId(any(), any());
+            verify(emailService, never()).sendTutoringStudentLeft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -471,6 +543,7 @@ class TutoringControllerTest {
 
             assertThat(response.getStatusCode().value()).isEqualTo(404);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "Tutoring class not found"));
+            verify(emailService, never()).sendTutoringStudentLeft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -483,6 +556,7 @@ class TutoringControllerTest {
 
             assertThat(response.getStatusCode().value()).isEqualTo(404);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "User not found"));
+            verify(emailService, never()).sendTutoringStudentLeft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
     }
 
