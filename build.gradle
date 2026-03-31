@@ -46,30 +46,23 @@ ext {
 	set('springModulithVersion', "2.0.2")
 }
 
-configurations.all {
-	resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-		if (details.requested.group == 'ch.qos.logback') {
-			details.useVersion '1.5.25'
-			details.because 'CVE-2026-1225: force logback-core to patched version'
-		}
-	}
-}
-
 dependencies {
 	implementation 'com.auth0:java-jwt:4.4.0'
-	implementation 'com.microsoft.azure:applicationinsights-runtime-attach:3.7.6'
 	implementation 'com.azure:azure-storage-blob:12.29.1'
-	implementation 'io.sentry:sentry-spring-boot-4-starter:8.27.1'
-	implementation 'io.opentelemetry:opentelemetry-api:1.56.0'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-  	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.modulith:spring-modulith-starter-core'
+
+	// Force fixed Logback versions
+	implementation 'ch.qos.logback:logback-core:1.5.25'
+	implementation 'ch.qos.logback:logback-classic:1.5.25'
+
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -102,7 +95,7 @@ publishing {
 		repositories {
 			maven {
 				name = 'GitHubPackages'
-				url = uri("https://maven.pkg.github.com/nus-mtech-se-projects/PeerConnect")
+				url = uri("https://maven.pkg.github.com/${githubOwner}/${githubRepo}")
 				credentials {
 					username = githubUser
 					password = githubToken
