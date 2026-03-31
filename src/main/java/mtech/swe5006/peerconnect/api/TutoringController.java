@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -141,6 +142,74 @@ public class TutoringController {
         return ResponseEntity.ok(buildClassPayload(tutoringClass, currentUser));
     }
 
+    @PutMapping("/classes/{id}")
+    public ResponseEntity<?> updateClass(@PathVariable UUID id, Authentication auth, @RequestBody Map<String, Object> body) {
+        User currentUser = getCurrentUser(auth);
+        if (currentUser == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        }
+
+        TutoringClass tutoringClass = tutoringClassRepository.findById(id).orElse(null);
+        if (tutoringClass == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Tutoring class not found"));
+        }
+        if (!currentUser.getId().equals(tutoringClass.getCreatedBy())) {
+            return ResponseEntity.status(403).body(Map.of("error", "Not authorized to update this tutoring class"));
+        }
+
+        String title = firstNonBlank(asString(body.get("title")), tutoringClass.getTitle());
+        String moduleCode = firstNonBlank(asString(body.get("moduleCode")), tutoringClass.getModuleCode());
+        String topic = body.containsKey("topic") ? asString(body.get("topic")) : tutoringClass.getTopic();
+        String description = body.containsKey("description") ? asString(body.get("description")) : tutoringClass.getDescription();
+        String schedule = firstNonBlank(asString(body.get("schedule")), tutoringClass.getSchedule());
+        String mode = firstNonBlank(asString(body.get("mode")), tutoringClass.getMode()).toLowerCase();
+        String location = body.containsKey("location") ? asString(body.get("location")) : tutoringClass.getLocation();
+        String meetingLink = body.containsKey("meetingLink") ? asString(body.get("meetingLink")) : tutoringClass.getMeetingLink();
+        Short maxStudents = body.containsKey("maxStudents")
+            ? asShort(body.get("maxStudents"), tutoringClass.getMaxStudents())
+            : tutoringClass.getMaxStudents();
+
+        String validationError = validateClassInput(title, moduleCode, schedule, mode, location, meetingLink, maxStudents);
+        if (validationError != null) {
+            return ResponseEntity.badRequest().body(Map.of("error", validationError));
+        }
+
+        tutoringClass.setTitle(title);
+        tutoringClass.setModuleCode(moduleCode);
+        tutoringClass.setTopic(topic);
+        tutoringClass.setDescription(description);
+        tutoringClass.setSchedule(schedule);
+        tutoringClass.setMode(mode);
+        tutoringClass.setLocation(location);
+        tutoringClass.setMeetingLink(meetingLink);
+        tutoringClass.setMaxStudents(maxStudents);
+        tutoringClassRepository.save(tutoringClass);
+
+        try {
+            List<String> enrolledStudentEmails = getEnrolledStudentEmails(id);
+            String[] recipients = enrolledStudentEmails.isEmpty()
+                ? new String[]{currentUser.getEmail()}
+                : enrolledStudentEmails.toArray(String[]::new);
+            emailService.sendTutoringClassUpdated(
+                recipients,
+                tutoringClass.getTitle(),
+                tutoringClass.getModuleCode(),
+                tutoringClass.getTopic(),
+                tutoringClass.getSchedule(),
+                displayName(currentUser),
+                currentUser.getEmail(),
+                tutoringClass.getMode(),
+                tutoringClass.getLocation(),
+                tutoringClass.getMeetingLink(),
+                tutoringClass.getDescription()
+            );
+        } catch (Exception emailEx) {
+            log.warn("[UpdateTutoringClass] Failed to send class-updated email for class {}: {}", id, emailEx.getMessage());
+        }
+
+        return ResponseEntity.ok(buildClassPayload(tutoringClass, currentUser));
+    }
+
     @DeleteMapping("/classes/{id}")
     public ResponseEntity<?> deleteClass(@PathVariable UUID id, Authentication auth) {
         User currentUser = getCurrentUser(auth);
@@ -163,8 +232,11 @@ public class TutoringController {
         tutoringClassRepository.delete(tutoringClass);
 
         try {
+            String[] recipients = enrolledStudentEmails.isEmpty()
+                ? new String[]{currentUser.getEmail()}
+                : enrolledStudentEmails.toArray(String[]::new);
             emailService.sendTutoringClassDeleted(
-                enrolledStudentEmails.toArray(String[]::new),
+                recipients,
                 tutoringClass.getTitle(),
                 tutoringClass.getModuleCode(),
                 tutoringClass.getTopic(),

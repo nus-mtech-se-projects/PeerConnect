@@ -227,6 +227,136 @@ class TutoringControllerTest {
     }
 
     @Nested
+    @DisplayName("PUT /api/tutoring/classes/{id}")
+    class UpdateClass {
+        private UUID classId;
+        private TutoringClass tutoringClass;
+
+        @BeforeEach
+        void init() {
+            classId = UUID.randomUUID();
+            tutoringClass = new TutoringClass();
+            tutoringClass.setId(classId);
+            tutoringClass.setTitle("Advanced Java");
+            tutoringClass.setModuleCode("CS5000");
+            tutoringClass.setTopic("Concurrency");
+            tutoringClass.setDescription("Weekly peer tutoring");
+            tutoringClass.setSchedule("Fridays 6pm");
+            tutoringClass.setMode("online");
+            tutoringClass.setMeetingLink("https://zoom.us/java");
+            tutoringClass.setMaxStudents((short) 5);
+            tutoringClass.setCreatedBy(alice.getId());
+
+            lenient().when(userRepository.findByEmail(alice.getEmail())).thenReturn(Optional.of(alice));
+            lenient().when(userRepository.findByEmail(bob.getEmail())).thenReturn(Optional.of(bob));
+            lenient().when(tutoringClassRepository.findById(classId)).thenReturn(Optional.of(tutoringClass));
+            lenient().when(tutoringClassRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            lenient().when(tutoringEnrollmentRepository.countByClassId(classId)).thenReturn(0L);
+            lenient().when(tutoringEnrollmentRepository.findByClassIdAndUserId(classId, alice.getId()))
+                .thenReturn(Optional.empty());
+            lenient().when(userRepository.findById(alice.getId())).thenReturn(Optional.of(alice));
+        }
+
+        @Test
+        void creatorCanUpdateClass() {
+            TutoringEnrollment enrollment = new TutoringEnrollment();
+            enrollment.setClassId(classId);
+            enrollment.setUserId(bob.getId());
+            when(tutoringEnrollmentRepository.findByClassId(classId)).thenReturn(List.of(enrollment));
+            when(userRepository.findById(bob.getId())).thenReturn(Optional.of(bob));
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("title", "Advanced Java II");
+            body.put("mode", "hybrid");
+            body.put("location", "COM1-0208");
+            body.put("meetingLink", "https://zoom.us/java-2");
+            body.put("maxStudents", 8);
+
+            ResponseEntity<?> res = controller.updateClass(classId, authFor(alice), body);
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            Map<?, ?> payload = (Map<?, ?>) res.getBody();
+            assertThat(payload.get("title")).isEqualTo("Advanced Java II");
+            assertThat(payload.get("mode")).isEqualTo("hybrid");
+            assertThat(payload.get("location")).isEqualTo("COM1-0208");
+            assertThat(payload.get("meetingLink")).isEqualTo("https://zoom.us/java-2");
+            assertThat(payload.get("maxStudents")).isEqualTo((short) 8);
+            verify(tutoringClassRepository).save(tutoringClass);
+            verify(emailService).sendTutoringClassUpdated(
+                aryEq(new String[]{"bob@u.nus.edu"}),
+                eq("Advanced Java II"),
+                eq("CS5000"),
+                eq("Concurrency"),
+                eq("Fridays 6pm"),
+                eq("Alice Tan"),
+                eq("alice@u.nus.edu"),
+                eq("hybrid"),
+                eq("COM1-0208"),
+                eq("https://zoom.us/java-2"),
+                eq("Weekly peer tutoring")
+            );
+        }
+
+        @Test
+        void updateFallsBackToTutorWhenNoStudents() {
+            when(tutoringEnrollmentRepository.findByClassId(classId)).thenReturn(List.of());
+
+            ResponseEntity<?> res = controller.updateClass(classId, authFor(alice), Map.of("title", "Advanced Java II"));
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            verify(emailService).sendTutoringClassUpdated(
+                aryEq(new String[]{"alice@u.nus.edu"}),
+                eq("Advanced Java II"),
+                eq("CS5000"),
+                eq("Concurrency"),
+                eq("Fridays 6pm"),
+                eq("Alice Tan"),
+                eq("alice@u.nus.edu"),
+                eq("online"),
+                isNull(),
+                eq("https://zoom.us/java"),
+                eq("Weekly peer tutoring")
+            );
+        }
+
+        @Test
+        void nonCreatorCannotUpdateClass() {
+            ResponseEntity<?> res = controller.updateClass(classId, authFor(bob), Map.of("title", "Hack"));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(403);
+            assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Not authorized to update this tutoring class");
+            verify(tutoringClassRepository, never()).save(any());
+            verify(emailService, never()).sendTutoringClassUpdated(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void missingMeetingLinkForOnlineReturns400() {
+            Map<String, Object> body = new HashMap<>();
+            body.put("meetingLink", "");
+
+            ResponseEntity<?> res = controller.updateClass(classId, authFor(alice), body);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(400);
+            assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Meeting link is required for online/hybrid classes");
+            verify(tutoringClassRepository, never()).save(any());
+            verify(emailService, never()).sendTutoringClassUpdated(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void classNotFoundReturns404() {
+            UUID unknownId = UUID.randomUUID();
+            when(tutoringClassRepository.findById(unknownId)).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.updateClass(unknownId, authFor(alice), Map.of("title", "New"));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Tutoring class not found");
+            verify(tutoringClassRepository, never()).save(any());
+            verify(emailService, never()).sendTutoringClassUpdated(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        }
+    }
+
+    @Nested
     @DisplayName("DELETE /api/tutoring/classes/{id}")
     class DeleteClass {
         UUID classId;
@@ -261,6 +391,27 @@ class TutoringControllerTest {
             verify(peerFeedbackRepository).deleteByPeerTutorGroupId(classId);
             verify(emailService).sendTutoringClassDeleted(
                 aryEq(new String[]{"bob@u.nus.edu"}),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq("Alice Tan"),
+                eq("alice@u.nus.edu"),
+                isNull(),
+                isNull(),
+                isNull()
+            );
+        }
+
+        @Test
+        void deleteFallsBackToTutorWhenNoStudents() {
+            when(tutoringEnrollmentRepository.findByClassId(classId)).thenReturn(List.of());
+
+            ResponseEntity<?> res = controller.deleteClass(classId, authFor(alice));
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            verify(emailService).sendTutoringClassDeleted(
+                aryEq(new String[]{"alice@u.nus.edu"}),
                 isNull(),
                 isNull(),
                 isNull(),

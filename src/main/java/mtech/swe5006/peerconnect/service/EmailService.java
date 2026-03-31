@@ -96,8 +96,12 @@ public class EmailService {
                                          String tutorEmail, String mode,
                                          String location, String meetingLink) {
         studentEmails = java.util.Arrays.stream(studentEmails).filter(e -> !isBlockedEmail(e)).toArray(String[]::new);
-        if (studentEmails.length == 0) { log.info("Skipping tutoring-class-deleted email - all recipients blocked"); return; }
-        SimpleMailMessage msg = prepareMsg(tutorEmail, studentEmails);
+        String[] recipients = studentEmails.length > 0
+            ? studentEmails
+            : (tutorEmail != null && !tutorEmail.isBlank() ? new String[]{tutorEmail} : new String[0]);
+        String cc = studentEmails.length > 0 ? tutorEmail : null;
+        if (recipients.length == 0) { log.info("Skipping tutoring-class-deleted email - no valid recipients"); return; }
+        SimpleMailMessage msg = prepareMsg(cc, recipients);
         msg.setSubject("[PeerConnectSG] Peer Tutor Group Deleted: " + classTitle);
         msg.setText(
             "Dear Student,\n\n"
@@ -105,6 +109,35 @@ public class EmailService {
             + tutoringClassInfoBlock(classTitle, moduleCode, topic, schedule, mode, location, meetingLink)
             + "Tutor:            " + tutorName + "\n\n"
             + "You are welcome to browse and join other peer tutor groups on the platform.\n\n"
+            + SYS_FOOTER
+        );
+        mailSender.send(msg);
+    }
+
+    /**
+     * Notify enrolled tutees when a tutoring class is updated by the tutor.
+     */
+    public void sendTutoringClassUpdated(String[] studentEmails, String classTitle,
+                                         String moduleCode, String topic,
+                                         String schedule, String tutorName,
+                                         String tutorEmail, String mode,
+                                         String location, String meetingLink,
+                                         String description) {
+        studentEmails = java.util.Arrays.stream(studentEmails).filter(e -> !isBlockedEmail(e)).toArray(String[]::new);
+        String[] recipients = studentEmails.length > 0
+            ? studentEmails
+            : (tutorEmail != null && !tutorEmail.isBlank() ? new String[]{tutorEmail} : new String[0]);
+        String cc = studentEmails.length > 0 ? tutorEmail : null;
+        if (recipients.length == 0) { log.info("Skipping tutoring-class-updated email - no valid recipients"); return; }
+        SimpleMailMessage msg = prepareMsg(cc, recipients);
+        msg.setSubject("[PeerConnectSG] Peer Tutor Group Updated: " + classTitle);
+        msg.setText(
+            "Dear Student,\n\n"
+            + "The following peer tutor group has been updated on PeerConnectSG. Please review the latest details:\n\n"
+            + tutoringClassInfoBlock(classTitle, moduleCode, topic, schedule, mode, location, meetingLink)
+            + "    Description:    " + (description != null && !description.isBlank() ? description : "N/A") + "\n"
+            + "    Tutor:          " + tutorName + "\n\n"
+            + "Please log in to PeerConnectSG to view the latest class details.\n\n"
             + SYS_FOOTER
         );
         mailSender.send(msg);

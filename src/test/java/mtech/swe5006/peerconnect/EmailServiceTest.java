@@ -140,6 +140,74 @@ class EmailServiceTest {
             assertThat(msg.getText()).contains("CS5000");
             assertThat(msg.getFrom()).isEqualTo("peerconnectsg@gmail.com");
         }
+
+        @Test
+        @DisplayName("falls back to tutor when no enrolled students exist")
+        void sendsDeletedEmailToTutorWhenNoStudents() {
+            emailService.sendTutoringClassDeleted(
+                new String[0],
+                "Advanced Java", "CS5000", "Concurrency",
+                "Fridays 6pm", "Alice Tan", "alice@u.nus.edu",
+                "online", null, "https://zoom.us/java"
+            );
+
+            verify(mailSender).send(msgCaptor.capture());
+            SimpleMailMessage msg = msgCaptor.getValue();
+
+            assertThat(msg.getTo()).containsExactly("alice@u.nus.edu");
+            assertThat(msg.getCc()).isNull();
+            assertThat(msg.getSubject()).contains("Peer Tutor Group Deleted");
+            assertThat(msg.getSubject()).contains("Advanced Java");
+        }
+    }
+
+    @Nested
+    @DisplayName("sendTutoringClassUpdated")
+    class TutoringClassUpdated {
+
+        @Test
+        @DisplayName("sends class update notice to enrolled students and cc's the tutor")
+        void sendsUpdatedEmail() {
+            emailService.sendTutoringClassUpdated(
+                new String[]{"bob@u.nus.edu"},
+                "Advanced Java II", "CS5000", "Concurrency",
+                "Fridays 6pm", "Alice Tan", "alice@u.nus.edu",
+                "hybrid", "COM1-0208", "https://zoom.us/java-2",
+                "Weekly peer tutoring"
+            );
+
+            verify(mailSender).send(msgCaptor.capture());
+            SimpleMailMessage msg = msgCaptor.getValue();
+
+            assertThat(msg.getTo()).containsExactly("bob@u.nus.edu");
+            assertThat(msg.getCc()).containsExactly("alice@u.nus.edu");
+            assertThat(msg.getSubject()).contains("Peer Tutor Group Updated");
+            assertThat(msg.getSubject()).contains("Advanced Java II");
+            assertThat(msg.getText()).contains("Alice Tan");
+            assertThat(msg.getText()).contains("COM1-0208");
+            assertThat(msg.getText()).contains("Weekly peer tutoring");
+            assertThat(msg.getFrom()).isEqualTo("peerconnectsg@gmail.com");
+        }
+
+        @Test
+        @DisplayName("falls back to tutor when no enrolled students exist")
+        void sendsUpdatedEmailToTutorWhenNoStudents() {
+            emailService.sendTutoringClassUpdated(
+                new String[0],
+                "Advanced Java II", "CS5000", "Concurrency",
+                "Fridays 6pm", "Alice Tan", "alice@u.nus.edu",
+                "hybrid", "COM1-0208", "https://zoom.us/java-2",
+                "Weekly peer tutoring"
+            );
+
+            verify(mailSender).send(msgCaptor.capture());
+            SimpleMailMessage msg = msgCaptor.getValue();
+
+            assertThat(msg.getTo()).containsExactly("alice@u.nus.edu");
+            assertThat(msg.getCc()).isNull();
+            assertThat(msg.getSubject()).contains("Peer Tutor Group Updated");
+            assertThat(msg.getSubject()).contains("Advanced Java II");
+        }
     }
 
     @Nested
