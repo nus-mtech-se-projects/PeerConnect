@@ -1,0 +1,129 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.0.3'
+	id 'io.spring.dependency-management' version '1.1.7'
+	id 'maven-publish'
+	id 'org.sonarqube' version '7.2.2.6593'
+	id 'jacoco'
+}
+
+group = 'mtech.swe5006'
+version = '0.0.1-SNAPSHOT'
+description = 'Group 1 Project. Members : CALLUM TAN DAI MIN, FOO CHUAN YONG, LAW SONG MING, PYIE SONE, RUBY FERDIANTO, VINOTH KANNAN ROHINI, MARK TEO'
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+def githubOwner = findProperty('gpr.owner') ?: System.getenv('GH_PACKAGES_OWNER')
+def githubRepo = findProperty('gpr.repo') ?: System.getenv('GH_PACKAGES_REPO') ?: rootProject.name
+def githubUser = findProperty('gpr.user') ?: System.getenv('GH_PACKAGES_USER')
+def githubToken = System.getenv('GH_PACKAGES_TOKEN') ?: findProperty('gpr.key')
+
+repositories {
+	mavenCentral()
+
+	if (githubOwner) {
+		maven {
+			name = 'GitHubPackages'
+			url = uri("https://maven.pkg.github.com/${githubOwner}/${githubRepo}")
+			credentials {
+				username = githubUser
+				password = githubToken
+			}
+		}
+	}
+}
+
+ext {
+	set('springModulithVersion', "2.0.2")
+}
+
+dependencies {
+	implementation 'com.auth0:java-jwt:4.4.0'
+	implementation 'com.azure:azure-storage-blob:12.29.1'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.modulith:spring-modulith-starter-core'
+
+	// Force fixed Logback versions
+	implementation 'ch.qos.logback:logback-core:1.5.25'
+	implementation 'ch.qos.logback:logback-classic:1.5.25'
+
+	compileOnly 'org.projectlombok:lombok'
+	developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
+	annotationProcessor 'org.projectlombok:lombok'
+	runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc'
+	runtimeOnly 'com.h2database:h2'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.security:spring-security-test'
+	testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.modulith:spring-modulith-bom:${springModulithVersion}"
+	}
+}
+
+// Publish a standard Java artifact for downstream Gradle/Maven consumers.
+tasks.named('jar') {
+	enabled = true
+}
+
+publishing {
+	publications {
+		gpr(MavenPublication) {
+			from components.java
+		}
+	}
+	if (githubOwner) {
+		repositories {
+			maven {
+				name = 'GitHubPackages'
+				url = uri("https://maven.pkg.github.com/${githubOwner}/${githubRepo}")
+				credentials {
+					username = githubUser
+					password = githubToken
+				}
+			}
+		}
+	}
+}
+
+tasks.named('generateMetadataFileForGprPublication') {
+	suppressedValidationErrors.add('dependencies-without-versions')
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+	dependsOn test
+	reports {
+		xml.required = true
+	}
+}
+
+sonar {
+	properties {
+		property 'sonar.sourceEncoding', 'UTF-8'
+		property 'sonar.coverage.jacoco.xmlReportPaths', 'build/reports/jacoco/test/jacocoTestReport.xml'
+	}
+}
