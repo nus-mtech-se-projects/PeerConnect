@@ -51,13 +51,18 @@ dependencies {
 	implementation 'com.azure:azure-storage-blob:12.29.1'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-  	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.modulith:spring-modulith-starter-core'
+
+	// Force fixed Logback versions
+	implementation 'ch.qos.logback:logback-core:1.5.25'
+	implementation 'ch.qos.logback:logback-classic:1.5.25'
+
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -90,7 +95,7 @@ publishing {
 		repositories {
 			maven {
 				name = 'GitHubPackages'
-				url = uri("https://maven.pkg.github.com/nus-mtech-se-projects/PeerConnect")
+				url = uri("https://maven.pkg.github.com/${githubOwner}/${githubRepo}")
 				credentials {
 					username = githubUser
 					password = githubToken

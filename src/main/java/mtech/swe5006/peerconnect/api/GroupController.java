@@ -45,6 +45,7 @@ import mtech.swe5006.peerconnect.data.sql.StudySession;
 import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.service.AuditService;
 import mtech.swe5006.peerconnect.service.EmailService;
 
 @RestController
@@ -94,6 +95,7 @@ public class GroupController {
     private final StudySessionRepository studySessionRepository;
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final AuditService auditService;
     private final EmailService emailService;
     private final RestrictedUserRepository restrictedUserRepository;
 
@@ -102,6 +104,7 @@ public class GroupController {
                            StudySessionRepository studySessionRepository,
                            UserRepository userRepository,
                            JdbcTemplate jdbcTemplate,
+                           AuditService auditService,
                            EmailService emailService,
                            RestrictedUserRepository restrictedUserRepository) {
         this.groupRepository = groupRepository;
@@ -109,6 +112,7 @@ public class GroupController {
         this.studySessionRepository = studySessionRepository;
         this.userRepository = userRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.auditService = auditService;
         this.emailService = emailService;
         this.restrictedUserRepository = restrictedUserRepository;
     }
@@ -241,6 +245,17 @@ public class GroupController {
             // Group was saved; return success but log the member insert failure
         }
 
+        auditService.record(
+            "STUDY_GROUP_CREATED",
+            user.getId(),
+            user.getEmail(),
+            "STUDY_GROUP",
+            group.getId(),
+            "SUCCESS",
+            null,
+            null,
+            Map.of("approvalRequired", approvalRequired, "studyMode", studyMode));
+
         return ResponseEntity.ok(buildGroupDetails(group, user));
     }
 
@@ -363,6 +378,18 @@ public class GroupController {
         long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
         refreshGroupStatus(group);
         groupRepository.save(group);
+        if ("approved".equalsIgnoreCase(membership.getMembershipStatus())) {
+            auditService.record(
+                "GROUP_MEMBER_ADDED",
+                user.getId(),
+                user.getEmail(),
+                "STUDY_GROUP",
+                id,
+                "SUCCESS",
+                null,
+                null,
+                Map.of("membershipStatus", membership.getMembershipStatus()));
+        }
 
         // Send join notification email (TO: owner, CC: user)
         try {
@@ -374,7 +401,6 @@ public class GroupController {
         } catch (Exception emailEx) {
             log.warn("[JoinGroup] Failed to send join notification: {}", emailEx.getMessage());
         }
-
         return ResponseEntity.ok(Map.of(
             KEY_JOINED, STATUS_APPROVED.equalsIgnoreCase(membership.getMembershipStatus()),
             "alreadyJoined", false,
@@ -415,6 +441,16 @@ public class GroupController {
         long updatedCount = groupMemberRepository.countByGroupIdAndMembershipStatus(id, STATUS_APPROVED);
         refreshGroupStatus(group);
         groupRepository.save(group);
+        auditService.record(
+            "GROUP_MEMBER_LEFT",
+            user.getId(),
+            user.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of());
 
         // Send leave notification email (TO: owner, CC: user)
         try {
@@ -483,6 +519,16 @@ public class GroupController {
         membership.setRole(ROLE_MEMBER);
         membership.setMembershipStatus(KEY_INVITED);
         groupMemberRepository.save(membership);
+        auditService.record(
+            "GROUP_MEMBER_INVITED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of("targetUserId", target.getId().toString()));
 
         // Send invitation email notification
         try {
@@ -520,6 +566,16 @@ public class GroupController {
         groupMemberRepository.save(membership);
         refreshGroupStatus(group);
         groupRepository.save(group);
+        auditService.record(
+            "GROUP_MEMBER_ADDED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of("targetUserId", userId.toString(), "approvedByAdmin", true));
 
         // Send approval notification email
         try {
@@ -560,6 +616,16 @@ public class GroupController {
             log.error("[RemoveMember] DB error for group {}: {}", id, ex.getMessage());
             return ResponseEntity.status(500).body(Map.of(ERR_KEY, "Failed to remove member. Please try again."));
         }
+        auditService.record(
+            "GROUP_MEMBER_REMOVED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of("targetUserId", userId.toString()));
 
         // Send rejection notification email
         try {
@@ -567,7 +633,6 @@ public class GroupController {
         } catch (Exception emailEx) {
             log.warn("[RemoveMember] Failed to send rejection email for user {} in group {}: {}", userId, id, emailEx.getMessage());
         }
-
         return ResponseEntity.ok(Map.of("removed", true));
     }
 
@@ -598,6 +663,16 @@ public class GroupController {
 
         group.setCreatedBy(newOwnerId);
         groupRepository.save(group);
+        auditService.record(
+            "GROUP_OWNERSHIP_TRANSFERRED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_GROUP",
+            id,
+            "SUCCESS",
+            null,
+            null,
+            Map.of("newOwnerUserId", newOwnerId.toString()));
         return ResponseEntity.ok(Map.of("transferred", true, "newOwnerUserId", newOwnerId));
     }
 
@@ -719,6 +794,16 @@ public class GroupController {
             log.error("[CreateSession] DB error for group {}: {}", id, ex.getMessage());
             return ResponseEntity.status(500).body(Map.of(ERR_KEY, "Failed to save session. Please try again."));
         }
+        auditService.record(
+            "STUDY_SESSION_CREATED",
+            actor.getId(),
+            actor.getEmail(),
+            "STUDY_SESSION",
+            session.getId(),
+            "SUCCESS",
+            null,
+            null,
+            Map.of("groupId", id.toString()));
 
         // Send session-created email notification to approved members with role "member"
         try {

@@ -4,6 +4,7 @@ import mtech.swe5006.peerconnect.data.sql.Profile;
 import mtech.swe5006.peerconnect.data.sql.ProfileRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.service.AuditService;
 import mtech.swe5006.peerconnect.service.AzureBlobService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,13 +29,16 @@ public class ProfileController {
     private final ProfileRepository profileRepository;
     private final UserRepository userRepository;
     private final AzureBlobService azureBlobService;
+    private final AuditService auditService;
 
     public ProfileController(ProfileRepository profileRepository,
                              UserRepository userRepository,
-                             AzureBlobService azureBlobService) {
+                             AzureBlobService azureBlobService,
+                             AuditService auditService) {
         this.profileRepository = profileRepository;
         this.userRepository = userRepository;
         this.azureBlobService = azureBlobService;
+        this.auditService = auditService;
     }
 
     @GetMapping
@@ -112,6 +116,16 @@ public class ProfileController {
             profile.setFullTimeInd(null);
             profileRepository.save(profile);
         }
+        auditService.record(
+            "PROFILE_UPDATED",
+            user.getId(),
+            user.getEmail(),
+            "USER",
+            user.getId(),
+            "SUCCESS",
+            null,
+            null,
+            Map.of("updatedFields", body.keySet()));
 
         return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
     }

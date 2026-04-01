@@ -11,6 +11,7 @@ import mtech.swe5006.peerconnect.data.sql.StudySession;
 import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.service.AuditService;
 import mtech.swe5006.peerconnect.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +32,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,6 +50,8 @@ class GroupControllerTest {
     StudySessionRepository studySessionRepository;
     @Mock
     JdbcTemplate jdbcTemplate;
+    @Mock
+    AuditService auditService;
     @Mock
     EmailService emailService;
     @Mock
@@ -110,6 +115,19 @@ class GroupControllerTest {
             assertThat(cap.getValue().getUserId()).isEqualTo(alice.getId());
             ArgumentCaptor<StudyGroup> groupCaptor = ArgumentCaptor.forClass(StudyGroup.class);
             verify(groupRepository).save(groupCaptor.capture());
+            verify(auditService).record(
+                eq("STUDY_GROUP_CREATED"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("STUDY_GROUP"),
+                isNull(),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                argThat(details ->
+                    Boolean.FALSE.equals(details.get("approvalRequired"))
+                        && "online".equals(details.get("studyMode")))
+            );
         }
     }
 
@@ -142,6 +160,17 @@ class GroupControllerTest {
 
             ResponseEntity<?> res = controller.joinGroup(groupId, authFor(alice));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            verify(auditService).record(
+                eq("GROUP_MEMBER_ADDED"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("STUDY_GROUP"),
+                eq(groupId),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                argThat(details -> "approved".equals(details.get("membershipStatus")))
+            );
 
             // already member — controller returns 200 with alreadyJoined:true
             res = controller.joinGroup(groupId, authFor(alice));
@@ -150,8 +179,26 @@ class GroupControllerTest {
 
         @Test
         void leaveGroup() {
+            StudyGroupMember membership = new StudyGroupMember();
+            membership.setRole("member");
+            membership.setMembershipStatus("approved");
+            when(memberRepository.findByGroupIdAndUserId(groupId, alice.getId()))
+                .thenReturn(Optional.of(membership));
+            when(memberRepository.countByGroupIdAndMembershipStatus(groupId, "approved")).thenReturn(0L);
+
             ResponseEntity<?> res = controller.leaveGroup(groupId, authFor(alice));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            verify(auditService).record(
+                eq("GROUP_MEMBER_LEFT"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("STUDY_GROUP"),
+                eq(groupId),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                eq(Map.of())
+            );
         }
     }
 
@@ -558,6 +605,17 @@ class GroupControllerTest {
             ArgumentCaptor<StudyGroupMember> cap = ArgumentCaptor.forClass(StudyGroupMember.class);
             verify(memberRepository).save(cap.capture());
             assertThat(cap.getValue().getMembershipStatus()).isEqualTo("invited");
+            verify(auditService).record(
+                eq("GROUP_MEMBER_INVITED"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("STUDY_GROUP"),
+                eq(groupId),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                argThat(details -> charlie.getId().toString().equals(details.get("targetUserId")))
+            );
         }
 
         @Test
@@ -620,6 +678,19 @@ class GroupControllerTest {
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("approved")).isEqualTo(true);
             assertThat(pendingMembership.getMembershipStatus()).isEqualTo("approved");
+            verify(auditService).record(
+                eq("GROUP_MEMBER_ADDED"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("STUDY_GROUP"),
+                eq(groupId),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                argThat(details ->
+                    charlie.getId().toString().equals(details.get("targetUserId"))
+                        && Boolean.TRUE.equals(details.get("approvedByAdmin")))
+            );
         }
 
         @Test
@@ -668,6 +739,17 @@ class GroupControllerTest {
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("removed")).isEqualTo(true);
             verify(memberRepository).deleteByGroupIdAndUserId(groupId, charlie.getId());
+            verify(auditService).record(
+                eq("GROUP_MEMBER_REMOVED"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("STUDY_GROUP"),
+                eq(groupId),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                argThat(details -> charlie.getId().toString().equals(details.get("targetUserId")))
+            );
         }
 
         @Test
@@ -722,6 +804,17 @@ class GroupControllerTest {
             assertThat(((Map<?, ?>) res.getBody()).get("transferred")).isEqualTo(true);
             assertThat(charlieMembership.getRole()).isEqualTo("owner");
             assertThat(aliceMembership.getRole()).isEqualTo("admin");
+            verify(auditService).record(
+                eq("GROUP_OWNERSHIP_TRANSFERRED"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("STUDY_GROUP"),
+                eq(groupId),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                argThat(details -> charlie.getId().toString().equals(details.get("newOwnerUserId")))
+            );
         }
 
         @Test
@@ -766,6 +859,17 @@ class GroupControllerTest {
             ResponseEntity<?> res = controller.createSession(groupId, authFor(alice), body);
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("title")).isEqualTo("Week 1 Session");
+            verify(auditService).record(
+                eq("STUDY_SESSION_CREATED"),
+                eq(alice.getId()),
+                eq(alice.getEmail()),
+                eq("STUDY_SESSION"),
+                any(UUID.class),
+                eq("SUCCESS"),
+                isNull(),
+                isNull(),
+                argThat(details -> groupId.toString().equals(details.get("groupId")))
+            );
         }
 
         @Test
