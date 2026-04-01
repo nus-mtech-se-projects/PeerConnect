@@ -8,6 +8,7 @@ import mtech.swe5006.peerconnect.security.JwtService;
 import mtech.swe5006.peerconnect.service.EmailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -31,9 +32,11 @@ public class AuthController {
   
   private static final SecureRandom RANDOM = new SecureRandom();
 
-  /** Rate-limit: track last email-send time per user email (2-minute cooldown). */
+  /** Rate-limit: track last email-send time per user email. */
   private static final ConcurrentHashMap<String, LocalDateTime> emailCooldowns = new ConcurrentHashMap<>();
-  private static final long EMAIL_COOLDOWN_SECONDS = 120;
+
+  @Value("${app.email.cooldown.seconds:120}")
+  private long EMAIL_COOLDOWN_SECONDS;
 
   public AuthController(UserRepository userRepository,
       PasswordEncoder passwordEncoder,
