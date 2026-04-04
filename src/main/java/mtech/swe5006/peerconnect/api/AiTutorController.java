@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import mtech.swe5006.peerconnect.dto.AiTutorDtos.AiTutorRequest;
 import mtech.swe5006.peerconnect.dto.AiTutorDtos.AiTutorResponse;
 import mtech.swe5006.peerconnect.service.AiTutorService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,7 +31,10 @@ public class AiTutorController {
     }
 
     @ExceptionHandler(AiTutorService.AiUnavailableException.class)
-    public ResponseEntity<?> handleAiUnavailable() {
-        return ResponseEntity.internalServerError().body(Map.of("error", "AI service unavailable"));
+    public ResponseEntity<?> handleAiUnavailable(AiTutorService.AiUnavailableException ex) {
+        HttpStatus status = "AI service is not configured".equals(ex.getMessage())
+            ? HttpStatus.SERVICE_UNAVAILABLE
+            : HttpStatus.INTERNAL_SERVER_ERROR;
+        return ResponseEntity.status(status).body(Map.of("error", ex.getMessage()));
     }
 }
