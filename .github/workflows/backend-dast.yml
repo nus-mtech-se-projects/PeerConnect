@@ -3,12 +3,6 @@ name: Backend DAST (OWASP ZAP)
 on:
   schedule:
     - cron: "0 3 * * *"
-  pull_request:
-    branches: [main]
-  push:
-    branches:
-      - main
-      - "new_devsecops_pipelines"
   workflow_dispatch:
 
 jobs:
