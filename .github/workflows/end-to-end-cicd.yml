@@ -1,4 +1,5 @@
 name: End-to-End CI/CD Pipeline
+
 on:
   push:
     branches:
@@ -6,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  JAVA_VERSION: '21'
+  JAVA_VERSION: "21"
   AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
@@ -18,8 +19,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -58,8 +58,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -90,8 +89,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -151,47 +149,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: chmod +x .github/scripts/*.sh
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install Newman and HTML reporter
         run: npm install -g newman newman-reporter-htmlextra
 
       - name: Wait for application to be reachable
-        run: |
-          echo "Checking application is reachable via POST /api/auth/login ..."
-          for i in $(seq 1 18); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              -X POST -H "Content-Type: application/json" \
-              -d '{}' \
-              "${{ vars.AZURE_WEBAPP_URL }}/api/auth/login" || echo "000")
-            echo "Attempt $i: HTTP $HTTP_CODE"
-            if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "200" ]; then
-              echo "Application is reachable"
-              break
-            fi
-            if [ "$i" -eq 18 ]; then
-              echo "Application did not respond in time — aborting UAT"
-              exit 1
-            fi
-            sleep 10
-          done
+        env:
+          APP_URL: ${{ vars.AZURE_WEBAPP_URL }}
+        run: .github/scripts/wait-for-app.sh
 
       - name: Run Postman collection
-        run: |
-          newman run postman/PeerConnect.postman_collection.json \
-            --environment postman/PeerConnect.postman_environment.json \
-            --env-var "baseUrl=${{ vars.AZURE_WEBAPP_URL }}" \
-            --reporters cli,htmlextra \
-            --reporter-htmlextra-export postman-uat-report.html \
-            --reporter-htmlextra-title "PeerConnect UAT Report" \
-            --timeout-request 30000 \
-            --timeout-script 10000
+        env:
+          BASE_URL: ${{ vars.AZURE_WEBAPP_URL }}
+          REPORT_TITLE: PeerConnect UAT Report
+        run: .github/scripts/run-postman-uat.sh
 
       - name: Upload UAT report
         if: always()
@@ -200,3 +180,12 @@ jobs:
           name: postman-uat-report-${{ github.run_id }}
           path: postman-uat-report.html
           retention-days: 7
+
+      - name: Cleanup UAT test data
+        if: always()
+        env:
+          AZURE_SQL_SERVER: ${{ vars.AZURE_SQL_SERVER }}
+          AZURE_SQL_DATABASE: ${{ vars.AZURE_SQL_DATABASE }}
+          AZURE_SQL_USERNAME: ${{ secrets.AZURE_SQL_USERNAME }}
+          AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
+        run: .github/scripts/cleanup-uat-test-data.sh
