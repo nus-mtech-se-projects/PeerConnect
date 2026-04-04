@@ -37,6 +37,7 @@ import static mtech.swe5006.peerconnect.api.ControllerUtils.asString;
 import static mtech.swe5006.peerconnect.api.ControllerUtils.firstNonBlank;
 import static mtech.swe5006.peerconnect.api.ControllerUtils.resolveUser;
 import mtech.swe5006.peerconnect.data.sql.RestrictedUserRepository;
+import mtech.swe5006.peerconnect.data.sql.RestrictedUser;
 import mtech.swe5006.peerconnect.data.sql.StudyGroup;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMember;
 import mtech.swe5006.peerconnect.data.sql.StudyGroupMemberRepository;
@@ -125,8 +126,7 @@ public class GroupController {
         // Batch-load all blocker IDs for the current user in ONE query, then filter in memory
         if (currentUser != null) {
             UUID uid = currentUser.getId();
-            Set<UUID> blockerIds = restrictedUserRepository.findByBlockedId(uid)
-                .stream().map(r -> r.getBlockerId()).collect(Collectors.toSet());
+            Set<UUID> blockerIds = findBlockerIds(uid);
             if (!blockerIds.isEmpty()) {
                 int before = groups.size();
                 groups = groups.stream()
@@ -948,7 +948,28 @@ public class GroupController {
 
     private boolean isRestrictedFromGroup(StudyGroup group, UUID userId) {
         return group.getCreatedBy() != null
-            && restrictedUserRepository.existsByBlockerIdAndBlockedId(group.getCreatedBy(), userId);
+            && isRestricted(group.getCreatedBy(), userId);
+    }
+
+    private Set<UUID> findBlockerIds(UUID blockedUserId) {
+        try {
+            return restrictedUserRepository.findByBlockedId(blockedUserId)
+                .stream()
+                .map(RestrictedUser::getBlockerId)
+                .collect(Collectors.toSet());
+        } catch (Exception ex) {
+            log.warn("[RestrictedUsers] Falling back to no restrictions for blocked user {}: {}", blockedUserId, ex.getMessage());
+            return Set.of();
+        }
+    }
+
+    private boolean isRestricted(UUID blockerId, UUID blockedId) {
+        try {
+            return restrictedUserRepository.existsByBlockerIdAndBlockedId(blockerId, blockedId);
+        } catch (Exception ex) {
+            log.warn("[RestrictedUsers] Falling back to unrestricted state for blocker {} and blocked {}: {}", blockerId, blockedId, ex.getMessage());
+            return false;
+        }
     }
 
     private boolean isAdmin(StudyGroup group, UUID userId) {

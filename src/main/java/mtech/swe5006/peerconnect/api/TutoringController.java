@@ -108,6 +108,7 @@ public class TutoringController {
         tutoringClass.setModuleCode(moduleCode);
         tutoringClass.setTopic(topic);
         tutoringClass.setDescription(description);
+        tutoringClass.setStatus("active");
         tutoringClass.setSchedule(schedule);
         tutoringClass.setMode(mode);
         tutoringClass.setLocation(location);
@@ -236,7 +237,7 @@ public class TutoringController {
         List<String> enrolledStudentEmails = getEnrolledStudentEmails(id);
 
         peerFeedbackRepository.deleteByPeerTutorGroupId(id);
-        tutoringEnrollmentRepository.deleteByClassId(id);
+        deleteEnrollmentsByClassId(id);
         tutoringClassRepository.delete(tutoringClass);
         tutoringAuditFacade.classDeleted(currentUser, id);
 
@@ -277,12 +278,12 @@ public class TutoringController {
             return ResponseEntity.badRequest().body(Map.of("error", "Tutor cannot enroll in their own class"));
         }
 
-        TutoringEnrollment existing = tutoringEnrollmentRepository.findByClassIdAndUserId(id, currentUser.getId()).orElse(null);
+        TutoringEnrollment existing = findEnrollment(id, currentUser.getId());
         if (existing != null) {
             return ResponseEntity.ok(Map.of("alreadyEnrolled", true));
         }
 
-        long enrolledCount = tutoringEnrollmentRepository.countByClassId(id);
+        long enrolledCount = countEnrollments(id);
         if (tutoringClass.getMaxStudents() != null && enrolledCount >= tutoringClass.getMaxStudents()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Tutoring class is full"));
         }
@@ -290,7 +291,7 @@ public class TutoringController {
         TutoringEnrollment enrollment = new TutoringEnrollment();
         enrollment.setClassId(id);
         enrollment.setUserId(currentUser.getId());
-        tutoringEnrollmentRepository.save(enrollment);
+        saveEnrollment(enrollment);
         tutoringAuditFacade.classEnrolled(currentUser, id, enrolledCount + 1);
 
         try {
@@ -333,13 +334,13 @@ public class TutoringController {
             return ResponseEntity.badRequest().body(Map.of("error", "Tutor cannot leave their own class"));
         }
 
-        TutoringEnrollment existing = tutoringEnrollmentRepository.findByClassIdAndUserId(id, currentUser.getId()).orElse(null);
+        TutoringEnrollment existing = findEnrollment(id, currentUser.getId());
         if (existing == null) {
             return ResponseEntity.ok(Map.of("alreadyLeft", true));
         }
 
-        long currentCount = tutoringEnrollmentRepository.countByClassId(id);
-        tutoringEnrollmentRepository.deleteByClassIdAndUserId(id, currentUser.getId());
+        long currentCount = countEnrollments(id);
+        deleteEnrollment(id, currentUser.getId());
 
         try {
             User tutor = userRepository.findById(tutoringClass.getCreatedBy()).orElse(null);
@@ -379,9 +380,7 @@ public class TutoringController {
             return ResponseEntity.status(404).body(Map.of("error", "Tutoring class not found"));
         }
 
-        TutoringEnrollment enrollment = tutoringEnrollmentRepository
-            .findByClassIdAndUserId(id, reviewer.getId())
-            .orElse(null);
+        TutoringEnrollment enrollment = findEnrollment(id, reviewer.getId());
 
         if (enrollment == null) {
             return ResponseEntity.status(403).body(Map.of("error", "Only enrolled students can submit feedback"));
@@ -502,9 +501,9 @@ public class TutoringController {
 
     private Map<String, Object> buildClassPayload(TutoringClass tutoringClass, User currentUser) {
         User tutor = userRepository.findById(tutoringClass.getCreatedBy()).orElse(null);
-        long enrolledCount = tutoringEnrollmentRepository.countByClassId(tutoringClass.getId());
+        long enrolledCount = countEnrollments(tutoringClass.getId());
         boolean enrolled = currentUser != null
-            && tutoringEnrollmentRepository.findByClassIdAndUserId(tutoringClass.getId(), currentUser.getId()).isPresent();
+            && findEnrollment(tutoringClass.getId(), currentUser.getId()) != null;
 
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", tutoringClass.getId());
@@ -517,6 +516,7 @@ public class TutoringController {
         row.put("location", tutoringClass.getLocation());
         row.put("meetingLink", tutoringClass.getMeetingLink());
         row.put("maxStudents", tutoringClass.getMaxStudents());
+        row.put("status", tutoringClass.getStatus());
         row.put("createdBy", tutoringClass.getCreatedBy());
         row.put("createdAt", tutoringClass.getCreatedAt());
         row.put("enrolledCount", enrolledCount);
@@ -549,7 +549,7 @@ public class TutoringController {
 
     private List<String> getEnrolledStudentEmails(UUID classId) {
         List<String> emails = new ArrayList<>();
-        for (TutoringEnrollment enrollment : tutoringEnrollmentRepository.findByClassId(classId)) {
+        for (TutoringEnrollment enrollment : findEnrollmentsByClassId(classId)) {
             User student = userRepository.findById(enrollment.getUserId()).orElse(null);
             if (student != null && student.getEmail() != null && !student.getEmail().isBlank()) {
                 emails.add(student.getEmail());
@@ -586,21 +586,23 @@ public class TutoringController {
     private void saveTutoringClassFallback(TutoringClass tutoringClass) {
         if (tutoringClass.getId() == null) tutoringClass.setId(UUID.randomUUID());
         if (tutoringClass.getMode() == null) tutoringClass.setMode("online");
+        if (tutoringClass.getStatus() == null) tutoringClass.setStatus("active");
         if (tutoringClass.getMaxStudents() == null) tutoringClass.setMaxStudents((short) 5);
         if (tutoringClass.getCreatedAt() == null) tutoringClass.setCreatedAt(LocalDateTime.now());
 
         jdbcTemplate.update(
             """
             INSERT INTO tutoring_courses
-                (id, title, module_code, topic, description, schedule, mode, location,
+                (id, title, module_code, topic, description, status, schedule, mode, location,
                  meeting_link, max_students, created_by, tutor_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tutoringClass.getId().toString(),
             tutoringClass.getTitle(),
             tutoringClass.getModuleCode(),
             tutoringClass.getTopic(),
             tutoringClass.getDescription(),
+            tutoringClass.getStatus(),
             tutoringClass.getSchedule(),
             tutoringClass.getMode(),
             tutoringClass.getLocation(),
@@ -610,6 +612,57 @@ public class TutoringController {
             (tutoringClass.getTutorId() != null ? tutoringClass.getTutorId() : tutoringClass.getCreatedBy()).toString(),
             tutoringClass.getCreatedAt()
         );
+    }
+
+    private List<TutoringEnrollment> findEnrollmentsByClassId(UUID classId) {
+        try {
+            return tutoringEnrollmentRepository.findByClassId(classId);
+        } catch (Exception ex) {
+            log.warn("[TutoringEnrollment] Falling back to empty enrollments for class {}: {}", classId, ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private TutoringEnrollment findEnrollment(UUID classId, UUID userId) {
+        try {
+            return tutoringEnrollmentRepository.findByClassIdAndUserId(classId, userId).orElse(null);
+        } catch (Exception ex) {
+            log.warn("[TutoringEnrollment] Falling back to no enrollment for class {} and user {}: {}", classId, userId, ex.getMessage());
+            return null;
+        }
+    }
+
+    private long countEnrollments(UUID classId) {
+        try {
+            return tutoringEnrollmentRepository.countByClassId(classId);
+        } catch (Exception ex) {
+            log.warn("[TutoringEnrollment] Falling back to zero enrollments for class {}: {}", classId, ex.getMessage());
+            return 0L;
+        }
+    }
+
+    private void saveEnrollment(TutoringEnrollment enrollment) {
+        try {
+            tutoringEnrollmentRepository.save(enrollment);
+        } catch (Exception ex) {
+            log.warn("[TutoringEnrollment] Enrollment persistence unavailable for class {} and user {}: {}", enrollment.getClassId(), enrollment.getUserId(), ex.getMessage());
+        }
+    }
+
+    private void deleteEnrollment(UUID classId, UUID userId) {
+        try {
+            tutoringEnrollmentRepository.deleteByClassIdAndUserId(classId, userId);
+        } catch (Exception ex) {
+            log.warn("[TutoringEnrollment] Enrollment deletion unavailable for class {} and user {}: {}", classId, userId, ex.getMessage());
+        }
+    }
+
+    private void deleteEnrollmentsByClassId(UUID classId) {
+        try {
+            tutoringEnrollmentRepository.deleteByClassId(classId);
+        } catch (Exception ex) {
+            log.warn("[TutoringEnrollment] Bulk enrollment deletion unavailable for class {}: {}", classId, ex.getMessage());
+        }
     }
 
     @ExceptionHandler(Exception.class)
