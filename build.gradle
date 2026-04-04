@@ -49,6 +49,11 @@ ext {
 dependencies {
 	implementation 'com.auth0:java-jwt:4.4.0'
 	implementation 'com.azure:azure-storage-blob:12.29.1'
+
+	// Audit logging sinks (added by feature/audit-logging — missing from build.gradle)
+	implementation 'com.microsoft.azure:applicationinsights-runtime-attach:3.6.2'
+	implementation 'io.opentelemetry:opentelemetry-api:1.40.0'
+	implementation 'io.sentry:sentry:7.14.0'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
