@@ -24,18 +24,22 @@ public class DatabaseAuditSink implements AuditSink {
 
     @Override
     public void publish(AuditDispatchContext context) {
-        AuditEvent event = new AuditEvent();
-        event.setEventType(context.eventType());
-        event.setActorUserId(context.actorUserId());
-        event.setActorEmail(context.actorEmail());
-        event.setTargetType(context.targetType());
-        event.setTargetId(context.targetId());
-        event.setOutcome(context.outcome());
-        event.setRequestId(context.requestId());
-        event.setIpAddress(context.ipAddress());
-        event.setEventTime(context.eventTime());
-        event.setDetailsJson(toJson(context));
-        auditEventRepository.save(event);
+        try {
+            AuditEvent event = new AuditEvent();
+            event.setEventType(context.eventType());
+            event.setActorUserId(context.actorUserId());
+            event.setActorEmail(context.actorEmail());
+            event.setTargetType(context.targetType());
+            event.setTargetId(context.targetId());
+            event.setOutcome(context.outcome());
+            event.setRequestId(context.requestId());
+            event.setIpAddress(context.ipAddress());
+            event.setEventTime(context.eventTime());
+            event.setDetailsJson(toJson(context));
+            auditEventRepository.save(event);
+        } catch (Exception ex) {
+            log.warn("Failed to persist audit event to database: {}", context.eventType(), ex);
+        }
     }
 
     private String toJson(AuditDispatchContext context) {
