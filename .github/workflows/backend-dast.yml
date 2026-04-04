@@ -2,9 +2,9 @@ name: Backend DAST (OWASP ZAP)
 
 on:
   schedule:
-    - cron: '0 3 * * *'
+    - cron: "0 3 * * *"
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
     branches:
       - main
@@ -21,89 +21,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Make scripts executable
+        run: chmod +x .github/scripts/*.sh
+
       - name: Wait for application to be reachable
-        run: |
-          echo "Checking application is reachable via POST /api/auth/login ..."
-          for i in $(seq 1 18); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              -X POST -H "Content-Type: application/json" \
-              -d '{}' \
-              "${{ vars.AZURE_WEBAPP_URL }}/api/auth/login" || echo "000")
-            echo "Attempt $i: HTTP $HTTP_CODE"
-            if [ "$HTTP_CODE" = "400" ] || [ "$HTTP_CODE" = "200" ]; then
-              echo "Application is reachable"
-              break
-            fi
-            if [ "$i" -eq 18 ]; then
-              echo "Application did not respond in time — aborting DAST"
-              exit 1
-            fi
-            sleep 10
-          done
+        env:
+          APP_URL: ${{ vars.AZURE_WEBAPP_URL }}
+        run: .github/scripts/wait-for-app.sh
 
       - name: Authenticate and obtain JWT
         id: auth
         env:
+          APP_URL: ${{ vars.AZURE_WEBAPP_URL }}
           DAST_USER_EMAIL: ${{ secrets.DAST_USER_EMAIL }}
           DAST_USER_PASSWORD: ${{ secrets.DAST_USER_PASSWORD }}
-        run: |
-          if [ -z "$DAST_USER_EMAIL" ] || [ -z "$DAST_USER_PASSWORD" ]; then
-            echo "::error::Secrets DAST_USER_EMAIL and DAST_USER_PASSWORD must be set."
-            exit 1
-          fi
-          # Use jq to construct JSON safely to handle special characters in passwords
-          JSON_PAYLOAD=$(jq -n --arg email "$DAST_USER_EMAIL" --arg password "$DAST_USER_PASSWORD" '{email: $email, password: $password}')
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ vars.AZURE_WEBAPP_URL }}/api/auth/login" \
-            -H "Content-Type: application/json" \
-            -d "$JSON_PAYLOAD")
-          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | head -n -1)
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "Login failed with status $HTTP_STATUS"
-            echo "$BODY"
-            exit 1
-          fi
-          TOKEN=$(echo "$BODY" | jq -r '.accessToken')
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "accessToken not found in response"
-            echo "$BODY"
-            exit 1
-          fi
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-      - name: ZAP API Scan
-        run: |
-          TOKEN="${{ steps.auth.outputs.token }}"
-          # Create config to ignore 'Unexpected Content-Type' (100001) for 404 metadata probes
-          printf "100001\tIGNORE\t.*\n" > zap.conf
-          docker rm -f zap-scan 2>/dev/null || true
-          docker create --name zap-scan \
-            -v /zap/wrk \
-            -u 0 \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-api-scan.py \
-            -t "${{ vars.AZURE_WEBAPP_URL }}/v3/api-docs" \
-            -f openapi \
-            -c /zap/wrk/zap.conf \
-            -r report_html.html \
-            -J report_json.json \
-            -w report_md.md \
-            -z "-config replacer.full_list(0).description=jwt-auth \
-                -config replacer.full_list(0).enabled=true \
-                -config replacer.full_list(0).matchtype=REQ_HEADER \
-                -config replacer.full_list(0).matchstr=Authorization \
-                -config replacer.full_list(0).replacement=Bearer\ ${TOKEN}" \
-            -I
-          docker cp zap.conf zap-scan:/zap/wrk/zap.conf
-          docker start -a zap-scan || true
-          docker cp zap-scan:/zap/wrk/report_html.html . || true
-          docker cp zap-scan:/zap/wrk/report_json.json . || true
-          docker cp zap-scan:/zap/wrk/report_md.md . || true
-          docker rm zap-scan || true
-      - name: Debug report files
-        if: always()
-        run: ls -lah
+        run: .github/scripts/dast-auth.sh
 
-      - name: Upload ZAP Report
+      - name: Run ZAP API scan
+        env:
+          APP_URL: ${{ vars.AZURE_WEBAPP_URL }}
+          DAST_TOKEN: ${{ steps.auth.outputs.token }}
+        run: .github/scripts/run-zap-api-scan.sh
+
+      - name: Upload ZAP report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -113,3 +53,13 @@ jobs:
             report_json.json
             report_md.md
           retention-days: 7
+
+      - name: Cleanup DAST password reset rows
+        if: always()
+        env:
+          DAST_USER_EMAIL: ${{ secrets.DAST_USER_EMAIL }}
+          AZURE_SQL_SERVER: ${{ vars.AZURE_SQL_SERVER }}
+          AZURE_SQL_DATABASE: ${{ vars.AZURE_SQL_DATABASE }}
+          AZURE_SQL_USERNAME: ${{ secrets.AZURE_SQL_USERNAME }}
+          AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
+        run: .github/scripts/cleanup-dast-password-resets.sh
