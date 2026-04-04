@@ -63,7 +63,7 @@ public class AiTutorService {
     @Value("${openai.model:gpt-4o-mini}")
     private String model;
 
-    @Value("${openai.max-tokens:400}")
+    @Value("${openai.max-tokens:1000}")
     private int maxTokens;
 
     @Value("${openai.temperature:0.4}")
