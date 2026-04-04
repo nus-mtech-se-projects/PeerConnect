@@ -42,7 +42,7 @@ class AiTutorControllerTest {
             );
             when(aiTutorService.chat(request)).thenReturn("Binary search halves the search space.");
 
-            ResponseEntity<?> response = controller.chat(request);
+            var response = controller.chat(request);
 
             assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(response.getBody()).isEqualTo(new AiTutorResponse("Binary search halves the search space."));
@@ -56,7 +56,7 @@ class AiTutorControllerTest {
 
         @Test
         void returnsInternalServerErrorPayload() {
-            ResponseEntity<?> response = controller.handleAiUnavailable();
+            var response = controller.handleAiUnavailable();
 
             assertThat(response.getStatusCode().value()).isEqualTo(500);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "AI service unavailable"));
