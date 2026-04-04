@@ -695,6 +695,20 @@ class AuthControllerTest {
         }
 
         @Test
+        void changePasswordRequest_isNotBlockedByForgotPasswordCooldown() {
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+            when(jwtService.isValid("token")).thenReturn(true);
+            when(jwtService.extractUsername("token")).thenReturn(savedUser.getEmail());
+
+            ResponseEntity<?> forgotRes = controller.forgotPassword(
+                    new AuthController.ForgotPasswordRequest(savedUser.getEmail(), null));
+            ResponseEntity<?> changeRes = controller.changePasswordRequest("Bearer token");
+
+            assertThat(forgotRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(changeRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+        }
+
+        @Test
         void changePasswordConfirm_recordsAuditEvent() {
             PasswordResetToken token = new PasswordResetToken();
             token.setUserId(savedUser.getId());

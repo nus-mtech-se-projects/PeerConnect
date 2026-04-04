@@ -34,7 +34,7 @@ public class AuthController {
   
   private static final SecureRandom RANDOM = new SecureRandom();
 
-  /** Rate-limit: track last email-send time per user email. */
+  /** Rate-limit: track last email-send time per flow and user email. */
   private static final ConcurrentHashMap<String, LocalDateTime> emailCooldowns = new ConcurrentHashMap<>();
 
   @Value("${app.email.cooldown.seconds:120}")
@@ -210,7 +210,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     }
 
     // Rate-limit: max 1 email per 2 minutes per user
-    LocalDateTime lastSent = emailCooldowns.get(user.getEmail());
+    LocalDateTime lastSent = emailCooldowns.get(cooldownKey("forgot_password", user.getEmail()));
     if (lastSent != null && lastSent.plusSeconds(EMAIL_COOLDOWN_SECONDS).isAfter(LocalDateTime.now())) {
       return ResponseEntity.status(429).body(Map.of("error", "Please wait before requesting another code."));
     }
@@ -218,7 +218,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     String code = generateAndStoreVerificationCode(user);
     try {
       emailService.sendResetCode(user.getEmail(), code);
-      emailCooldowns.put(user.getEmail(), LocalDateTime.now());
+      emailCooldowns.put(cooldownKey("forgot_password", user.getEmail()), LocalDateTime.now());
     } catch (Exception e) {
       log.error("[ForgotPassword] Failed to send reset code to {}: {}", user.getEmail(), e.getMessage());
     }
@@ -265,7 +265,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     }
 
     // Rate-limit: max 1 email per 2 minutes per user
-    LocalDateTime lastSent = emailCooldowns.get(user.getEmail());
+    LocalDateTime lastSent = emailCooldowns.get(cooldownKey("change_password", user.getEmail()));
     if (lastSent != null && lastSent.plusSeconds(EMAIL_COOLDOWN_SECONDS).isAfter(LocalDateTime.now())) {
       return ResponseEntity.status(429).body(Map.of("error", "Please wait before requesting another code."));
     }
@@ -273,7 +273,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     String code = generateAndStoreVerificationCode(user);
     try {
       emailService.sendChangePasswordCode(user.getEmail(), code);
-      emailCooldowns.put(user.getEmail(), LocalDateTime.now());
+      emailCooldowns.put(cooldownKey("change_password", user.getEmail()), LocalDateTime.now());
     } catch (Exception e) {
       log.error("[ChangePasswordRequest] Failed to send code to {}: {}", user.getEmail(), e.getMessage());
     }
@@ -312,6 +312,10 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
     if (nusStudentId != null && !nusStudentId.isBlank())
       return userRepository.findByNusStudentId(nusStudentId.trim()).orElse(null);
     return null;
+  }
+
+  private String cooldownKey(String flow, String email) {
+    return flow + ":" + email;
   }
 
   /** Generate a 6-digit code, persist it as a PasswordResetToken, and return the code. */
