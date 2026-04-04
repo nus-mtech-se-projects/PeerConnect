@@ -56,10 +56,19 @@ class AiTutorControllerTest {
 
         @Test
         void returnsInternalServerErrorPayload() {
-            var response = controller.handleAiUnavailable();
+            var response = controller.handleAiUnavailable(new AiTutorService.AiUnavailableException());
 
             assertThat(response.getStatusCode().value()).isEqualTo(500);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "AI service unavailable"));
+        }
+
+        @Test
+        void returnsServiceUnavailableWhenAiIsNotConfigured() {
+            var response = controller.handleAiUnavailable(
+                new AiTutorService.AiUnavailableException("AI service is not configured"));
+
+            assertThat(response.getStatusCode().value()).isEqualTo(503);
+            assertThat(response.getBody()).isEqualTo(Map.of("error", "AI service is not configured"));
         }
     }
 }

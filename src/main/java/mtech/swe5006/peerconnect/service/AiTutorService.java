@@ -63,20 +63,46 @@ public class AiTutorService {
     @Value("${openai.model:gpt-4o-mini}")
     private String model;
 
+    @Value("${openai.max-tokens:400}")
+    private int maxTokens;
+
+    @Value("${openai.temperature:0.4}")
+    private double temperature;
+
+    @Value("${openai.max-history-messages:6}")
+    private int maxHistoryMessages;
+
+    @Value("${openai.max-message-chars:1500}")
+    private int maxMessageChars;
+
     public AiTutorService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 
     public String chat(AiTutorRequest request) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.error("OpenAI API key is not configured");
+            throw new AiUnavailableException("AI service is not configured");
+        }
+        if (apiUrl == null || apiUrl.isBlank()) {
+            log.error("OpenAI API URL is not configured");
+            throw new AiUnavailableException("AI service is not configured");
+        }
+        if (model == null || model.isBlank()) {
+            log.error("OpenAI model is not configured");
+            throw new AiUnavailableException("AI service is not configured");
+        }
+
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(new ChatMessage("system", SYSTEM_PROMPT));
 
-        if (request.history() != null) {
-            messages.addAll(request.history());
+        if (request.history() != null && !request.history().isEmpty()) {
+            List<ChatMessage> trimmedHistory = trimHistory(request.history());
+            messages.addAll(trimmedHistory);
         }
-        messages.add(new ChatMessage("user", request.message()));
+        messages.add(new ChatMessage("user", truncate(request.message())));
 
-        OpenAiRequest body = new OpenAiRequest(model, messages, 1000, 0.7);
+        OpenAiRequest body = new OpenAiRequest(model, messages, maxTokens, temperature);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -90,23 +116,44 @@ public class AiTutorService {
             );
 
             if (response == null || response.choices() == null || response.choices().isEmpty()) {
-                throw new AiUnavailableException();
+                throw new AiUnavailableException("AI service returned an empty response");
             }
             return response.choices().get(0).message().content();
 
         } catch (org.springframework.web.client.HttpClientErrorException ex) {
             log.error("OpenAI call failed [{}]: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
-            throw new AiUnavailableException();
+            throw new AiUnavailableException("AI service request was rejected");
         } catch (org.springframework.web.client.HttpServerErrorException ex) {
             log.error("OpenAI server error [{}]: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
-            throw new AiUnavailableException();
+            throw new AiUnavailableException("AI service is temporarily unavailable");
         } catch (RestClientException ex) {
             log.error("OpenAI call failed: {}", ex.getMessage(), ex);
-            throw new AiUnavailableException();
+            throw new AiUnavailableException("AI service request failed");
         }
     }
 
+    private List<ChatMessage> trimHistory(List<ChatMessage> history) {
+        int fromIndex = Math.max(0, history.size() - maxHistoryMessages);
+        return history.subList(fromIndex, history.size()).stream()
+            .map(message -> new ChatMessage(message.role(), truncate(message.content())))
+            .toList();
+    }
+
+    private String truncate(String text) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() <= maxMessageChars) {
+            return text;
+        }
+        return text.substring(0, maxMessageChars);
+    }
+
     public static class AiUnavailableException extends RuntimeException {
+        public AiUnavailableException(String message) {
+            super(message);
+        }
+
         public AiUnavailableException() {
             super("AI service unavailable");
         }
