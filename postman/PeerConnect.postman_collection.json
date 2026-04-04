@@ -1,0 +1,3428 @@
+{
+  "info": {
+    "_postman_id": "d1011c41-7df8-4605-aecd-3b2bd117a7cb",
+    "name": "PeerConnect",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "25558532"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on successful registration\", () => {\r",
+                  "  pm.response.to.have.status(200);\r",
+                  "});\r",
+                  "pm.test(\"Returns UUID id\", () => {\r",
+                  "  pm.expect(pm.response.json().id).to.match(\r",
+                  "    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\r",
+                  "  );\r",
+                  "});\r",
+                  "pm.test(\"Returns correct email\", () => {\r",
+                  "  pm.expect(pm.response.json().email).to.eql(pm.environment.get(\"runEmail\"));\r",
+                  "});\r",
+                  "pm.test(\"Password not exposed\", () => {\r",
+                  "  const body = pm.response.json();\r",
+                  "  pm.expect(body).to.not.have.property(\"password\");\r",
+                  "  pm.expect(body).to.not.have.property(\"passwordHash\");\r",
+                  "});\r",
+                  "\r",
+                  "// Duplicate email check\r",
+                  "pm.test(\"409 on duplicate email\", (done) => {\r",
+                  "  pm.sendRequest({\r",
+                  "    url: pm.environment.get(\"baseUrl\") + \"/api/auth/register\",\r",
+                  "    method: \"POST\",\r",
+                  "    header: { \"Content-Type\": \"application/json\" },\r",
+                  "    body: {\r",
+                  "      mode: \"raw\",\r",
+                  "      raw: JSON.stringify({\r",
+                  "        nusStudentId: \"A9999999Z\",\r",
+                  "        firstName: \"Dupe\", lastName: \"Email\",\r",
+                  "        email: pm.environment.get(\"runEmail\"),\r",
+                  "        phone: \"98000000\",\r",
+                  "        password: pm.environment.get(\"testPassword\")\r",
+                  "      })\r",
+                  "    }\r",
+                  "  }, (err, res) => {\r",
+                  "    pm.expect(res).to.have.status(409);\r",
+                  "    pm.expect(res.json().error).to.eql(\"Email already registered\");\r",
+                  "    done();\r",
+                  "  });\r",
+                  "});\r",
+                  "\r",
+                  "// Duplicate NUS ID check\r",
+                  "pm.test(\"409 on duplicate NUS Student ID\", (done) => {\r",
+                  "  pm.sendRequest({\r",
+                  "    url: pm.environment.get(\"baseUrl\") + \"/api/auth/register\",\r",
+                  "    method: \"POST\",\r",
+                  "    header: { \"Content-Type\": \"application/json\" },\r",
+                  "    body: {\r",
+                  "      mode: \"raw\",\r",
+                  "      raw: JSON.stringify({\r",
+                  "        nusStudentId: pm.environment.get(\"runNusId\"),\r",
+                  "        firstName: \"Dupe\", lastName: \"NusId\",\r",
+                  "        email: \"unique-\" + Date.now() + \"@u.nus.edu.sg\",\r",
+                  "        phone: \"98000001\",\r",
+                  "        password: pm.environment.get(\"testPassword\")\r",
+                  "      })\r",
+                  "    }\r",
+                  "  }, (err, res) => {\r",
+                  "    pm.expect(res).to.have.status(409);\r",
+                  "    pm.expect(res.json().error).to.eql(\"NUS Student ID already registered\");\r",
+                  "    done();\r",
+                  "  });\r",
+                  "});\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate unique identifiers per run\r",
+                  "pm.environment.set(\"runEmail\", \"test-\" + Date.now() + \"@u.nus.edu.sg\");\r",
+                  "pm.environment.set(\"runNusId\", \"T\" + Date.now().toString().slice(-7) + \"X\");"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"nusStudentId\": \"{{runNusId}}\",\r\n  \"firstName\": \"Test\",\r\n  \"lastName\": \"User\",\r\n  \"email\": \"{{runEmail}}\",\r\n  \"phone\": \"91234567\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login with Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on login with email\", () => {\r",
+                  "  pm.response.to.have.status(200);\r",
+                  "});\r",
+                  "pm.test(\"Returns accessToken and fields\", () => {\r",
+                  "  const b = pm.response.json();\r",
+                  "  pm.expect(b.accessToken).to.be.a(\"string\").and.have.length.above(10);\r",
+                  "  pm.expect(b.id).to.be.a(\"string\");\r",
+                  "  pm.expect(b.expiresInSeconds).to.be.a(\"number\").and.above(0);\r",
+                  "  pm.environment.set(\"authToken\", b.accessToken);\r",
+                  "});\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"email\": \"{{runEmail}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login with NUS Student ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Login with NUS ID succeeds\", () => {\r",
+                  "  pm.response.to.have.status(200);\r",
+                  "});\r",
+                  "pm.test(\"Returns nusStudentId in response\", () => {\r",
+                  "  pm.expect(pm.response.json().nusStudentId).to.eql(pm.environment.get(\"testNusId\"));\r",
+                  "});\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"nusStudentId\": \"{{testNusId}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Invalid Credentails",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Rejects bad password with 401\", () => {\r",
+                  "  pm.response.to.have.status(401);\r",
+                  "});\r",
+                  "pm.test(\"Error message returned\", () => {\r",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Invalid credentials\");\r",
+                  "});\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"email\": \"{{testEmail}}\",\r\n  \"password\": \"WrongPassword!\"\r\n}\r\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Validation (both fields / neither)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Rejects ambiguous login with 400\", () => {\r",
+                  "  pm.response.to.have.status(400);\r",
+                  "});\r",
+                  "pm.test(\"Correct error message\", () => {\r",
+                  "  pm.expect(pm.response.json().error).to.include(\"exactly one\");\r",
+                  "});\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"email\": \"{{testEmail}}\",\r\n  \"nusStudentId\": \"{{testNusId}}\",\r\n  \"password\": \"{{testPassword}}\"\r\n}\r\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Microsoft OAuth Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const msIdToken = pm.environment.get(\"msIdToken\");\r",
+                  "\r",
+                  "if (!msIdToken) {\r",
+                  "  pm.test(\"Microsoft login skipped \u00e2\u20ac\u201d no msIdToken configured\", () => {\r",
+                  "    pm.expect(true).to.be.true;\r",
+                  "  });\r",
+                  "} else {\r",
+                  "  pm.test(\"Microsoft login succeeds\", () => {\r",
+                  "    pm.response.to.have.status(200);\r",
+                  "  });\r",
+                  "  pm.test(\"Returns access token\", () => {\r",
+                  "    const body = pm.response.json();\r",
+                  "    pm.expect(body.accessToken).to.be.a(\"string\");\r",
+                  "    pm.environment.set(\"authToken\", body.accessToken);\r",
+                  "  });\r",
+                  "}\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "\r",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"idToken\": \"{{msIdToken}}\"\r\n}\r\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/microsoft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "microsoft"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password - Valid Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on forgot password\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns message string\", () => {",
+                  "  pm.expect(pm.response.json().message).to.be.a(\"string\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{runEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password - Missing Identifier",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when no email or NUS ID provided\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password - Wrong Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 on invalid reset code\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{runEmail}}\",\n  \"code\": \"000000\",\n  \"newPassword\": \"NewPass123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password Request - No Auth",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"401 without auth token\", () => {",
+                  "  pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password",
+                "request"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password Request - Authenticated",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on authenticated change password request\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns verification code message\", () => {",
+                  "  pm.expect(pm.response.json().message).to.include(\"code\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password",
+                "request"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password Confirm - Wrong Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 on wrong verification code\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"000000\",\n  \"newPassword\": \"NewPass456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/change-password/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "change-password",
+                "confirm"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get Current User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on get current user\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns all user fields\", () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.id).to.be.a(\"string\");",
+                  "  pm.expect(b.email).to.be.a(\"string\");",
+                  "  pm.expect(b.firstName).to.be.a(\"string\");",
+                  "  pm.expect(b.lastName).to.be.a(\"string\");",
+                  "  pm.expect(b.nusStudentId).to.be.a(\"string\");",
+                  "  pm.expect(b.userType).to.be.a(\"string\");",
+                  "  pm.expect(b.status).to.be.a(\"string\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User - No Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"403 without auth token\", () => {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Get Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on get profile\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns all profile fields\", () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.userId).to.be.a(\"string\");",
+                  "  pm.expect(b.email).to.be.a(\"string\");",
+                  "  pm.expect(b).to.have.property(\"faculty\");",
+                  "  pm.expect(b).to.have.property(\"major\");",
+                  "  pm.expect(b).to.have.property(\"yearOfStudy\");",
+                  "  pm.expect(b).to.have.property(\"bio\");",
+                  "  pm.expect(b).to.have.property(\"avatarUrl\");",
+                  "  pm.expect(b).to.have.property(\"fullTime\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile - No Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"403 without auth token\", () => {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Avatar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on delete avatar\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns message\", () => {",
+                  "  pm.expect(pm.response.json().message).to.be.a(\"string\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile/avatar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile",
+                "avatar"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Groups",
+      "item": [
+        {
+          "name": "Core CRUD",
+          "item": [
+            {
+              "name": "Create Group - Missing Name",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"400 when group name is missing\", () => {",
+                      "  pm.response.to.have.status(400);",
+                      "});",
+                      "pm.test(\"Returns error message\", () => {",
+                      "  pm.expect(pm.response.json().error).to.be.a(\"string\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"moduleCode\": \"CS1010\",\n  \"studyMode\": \"online\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Groups",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on list groups\", () => {",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns an array\", () => {",
+                      "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Group by ID",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on get group\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Contains members and sessions arrays\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  const b = pm.response.json();",
+                      "  pm.expect(b.id).to.eql(pm.environment.get(\"groupId\"));",
+                      "  pm.expect(b.members).to.be.an(\"array\");",
+                      "  pm.expect(b.sessions).to.be.an(\"array\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Group - Not Found",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"404 for unknown group ID\", () => {",
+                      "  pm.response.to.have.status(404);",
+                      "});",
+                      "pm.test(\"Returns error message\", () => {",
+                      "  pm.expect(pm.response.json().error).to.eql(\"Group not found\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/00000000-0000-0000-0000-000000000000",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "00000000-0000-0000-0000-000000000000"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Group",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on update group\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Name updated\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  const b = pm.response.json();",
+                      "  pm.expect(b.name).to.eql(\"Updated UAT Group\");",
+                      "  pm.expect(b.id).to.eql(pm.environment.get(\"groupId\"));",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Updated UAT Group\",\n  \"preferredSchedule\": \"2026-10-20T18:00:00\",\n  \"maxMembers\": 6\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Members",
+          "item": [
+            {
+              "name": "Setup: Register User 2",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "pm.environment.set(\"runEmail2\", \"test2-\" + Date.now() + \"@u.nus.edu.sg\");",
+                      "pm.environment.set(\"runNusId2\", \"U\" + Date.now().toString().slice(-7) + \"X\");"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on user 2 registration\", () => {",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Saves userId2\", () => {",
+                      "  const b = pm.response.json();",
+                      "  pm.expect(b.id).to.be.a(\"string\");",
+                      "  pm.environment.set(\"userId2\", b.id);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nusStudentId\": \"{{runNusId2}}\",\n  \"firstName\": \"User\",\n  \"lastName\": \"Two\",\n  \"email\": \"{{runEmail2}}\",\n  \"phone\": \"82345678\",\n  \"password\": \"{{testPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "register"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Setup: Login User 2",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on user 2 login\", () => {",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Saves authToken2\", () => {",
+                      "  pm.environment.set(\"authToken2\", pm.response.json().accessToken);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{runEmail2}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "login"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Members",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on get members\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Owner is in member list\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  const members = pm.response.json();",
+                      "  pm.expect(members).to.be.an(\"array\");",
+                      "  const owner = members.find(m => m.role === \"owner\" && m.membershipStatus === \"approved\");",
+                      "  pm.expect(owner).to.not.be.undefined;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/members",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Invite User 2",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on invite\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns invited:true\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.expect(pm.response.json().invited).to.be.true;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{runEmail2}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/members/invite",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members",
+                    "invite"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Invite - Unknown Email",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"404 for unknown email\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.response.to.have.status(404);",
+                      "});",
+                      "pm.test(\"Returns user not found error\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.expect(pm.response.json().error).to.eql(\"Target user not found\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"nobody-does-not-exist@u.nus.edu.sg\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/members/invite",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members",
+                    "invite"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Approve User 2",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on approve\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns approved:true\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) return;",
+                      "  pm.expect(pm.response.json().approved).to.be.true;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/members/{{userId2}}/approve",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members",
+                    "{{userId2}}",
+                    "approve"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Join Group - Already Joined (User 2)",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on join (already member)\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns alreadyJoined:true\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json().alreadyJoined).to.be.true;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/join",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "join"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Remove User 2",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on remove member\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns removed:true\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) return;",
+                      "  pm.expect(pm.response.json().removed).to.be.true;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/members/{{userId2}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "members",
+                    "{{userId2}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "User 2 Joins Fresh",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on fresh join\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns alreadyJoined:false\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json().alreadyJoined).to.be.false;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/join",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "join"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Owner Tries to Leave",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"400 when owner tries to leave\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.response.to.have.status(400);",
+                      "});",
+                      "pm.test(\"Returns correct error\", () => {",
+                      "  if (!pm.environment.get(\"groupId\")) return;",
+                      "  pm.expect(pm.response.json().error).to.eql(\"Group owner cannot leave the group\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/leave",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "leave"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Transfer Ownership to User 2",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on transfer ownership\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns transferred:true\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"userId2\")) return;",
+                      "  pm.expect(pm.response.json().transferred).to.be.true;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"newOwnerUserId\": \"{{userId2}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/transfer-ownership",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "transfer-ownership"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Sessions",
+          "item": [
+            {
+              "name": "Create Session (online)",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on create session\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Saves sessionId\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  if (pm.response.code !== 200) {",
+                      "    pm.environment.unset(\"sessionId\");",
+                      "    return;",
+                      "  }",
+                      "  const b = pm.response.json();",
+                      "  pm.expect(b.id).to.be.a(\"string\");",
+                      "  pm.environment.set(\"sessionId\", b.id);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"UAT Session 1\",\n  \"notes\": \"Test session notes\",\n  \"startsAt\": \"2026-08-01T10:00:00\",\n  \"endsAt\": \"2026-08-01T12:00:00\",\n  \"meetingLink\": \"https://zoom.us/j/uat-session-1\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Session - Missing Title",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"400 when session title missing\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(400);",
+                      "});",
+                      "pm.test(\"Returns title required error\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json().error).to.eql(\"Session title is required\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"startsAt\": \"2026-08-01T14:00:00\",\n  \"meetingLink\": \"https://zoom.us/j/no-title\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Session - Missing Meeting Link",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"400 when meeting link missing for online group\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(400);",
+                      "});",
+                      "pm.test(\"Returns meeting link required error\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json().error).to.eql(\"Meeting link is required for online sessions\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"No Link Session\",\n  \"startsAt\": \"2026-08-01T14:00:00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Sessions",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on list sessions\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns an array\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Session",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"sessionId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on update session\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"sessionId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Title updated\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"sessionId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json().title).to.eql(\"Updated UAT Session\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Updated UAT Session\",\n  \"meetingLink\": \"https://zoom.us/j/updated-session\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions/{{sessionId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions",
+                    "{{sessionId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Session",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"sessionId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on delete session\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"sessionId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns deleted:true\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"sessionId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json().deleted).to.be.true;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/sessions/{{sessionId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "sessions",
+                    "{{sessionId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Lifecycle",
+          "item": [
+            {
+              "name": "Non-member Dissolve Attempt",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"dissolveGroupId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"403 when non-admin tries to dissolve\", () => {",
+                      "  if (!pm.environment.get(\"dissolveGroupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(403);",
+                      "});",
+                      "pm.test(\"Returns not authorized error\", () => {",
+                      "  if (!pm.environment.get(\"dissolveGroupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json().error).to.eql(\"Only admins can dissolve group\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{dissolveGroupId}}/dissolve",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{dissolveGroupId}}",
+                    "dissolve"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Dissolve Group",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"dissolveGroupId\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"200 on dissolve group\", () => {",
+                      "  if (!pm.environment.get(\"dissolveGroupId\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Returns dissolved:true\", () => {",
+                      "  if (!pm.environment.get(\"dissolveGroupId\")) return;",
+                      "  pm.expect(pm.response.json().dissolved).to.be.true;",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{dissolveGroupId}}/dissolve",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{dissolveGroupId}}",
+                    "dissolve"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Join Dissolved Group",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"dissolveGroupId\") || !pm.environment.get(\"authToken2\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"400 when joining dissolved group\", () => {",
+                      "  if (!pm.environment.get(\"dissolveGroupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.response.to.have.status(400);",
+                      "});",
+                      "pm.test(\"Returns dissolved error\", () => {",
+                      "  if (!pm.environment.get(\"dissolveGroupId\") || !pm.environment.get(\"authToken2\")) return;",
+                      "  pm.expect(pm.response.json().error).to.eql(\"Group is dissolved\");",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{dissolveGroupId}}/join",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{dissolveGroupId}}",
+                    "join"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Cleanup: Delete Dissolve Test Group",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"dissolveGroupId\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Dissolve group cleanup succeeded\", () => {",
+                      "  if (!pm.environment.get(\"dissolveGroupId\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{dissolveGroupId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{dissolveGroupId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Cleanup: Delete Main Test Group",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken\")) {",
+                      "  pm.execution.skipRequest();",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Cleanup succeeded\", () => {",
+                      "  if (!pm.environment.get(\"groupId\") || !pm.environment.get(\"authToken\")) return;",
+                      "  pm.response.to.have.status(200);",
+                      "});",
+                      "pm.environment.set(\"groupId\", \"\");",
+                      "pm.environment.set(\"sessionId\", \"\");",
+                      "pm.environment.set(\"dissolveGroupId\", \"\");",
+                      "pm.environment.set(\"authToken2\", \"\");",
+                      "pm.environment.set(\"userId2\", \"\");"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{authToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tutoring",
+      "item": [
+        {
+          "name": "Create Class - Missing Title (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when title is missing\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Class title is required\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"online\",\n  \"meetingLink\": \"https://zoom.us/test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Class - Invalid Mode (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when mode is invalid\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Mode must be one of: online, in-person, hybrid\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Class\",\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"weekend\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Class - In-Person Missing Location (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when in-person class has no location\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Location is required for in-person/hybrid classes\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Class\",\n  \"moduleCode\": \"CS3000\",\n  \"schedule\": \"Mon 5pm\",\n  \"mode\": \"in-person\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Tutoring Classes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 response\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns an array\", () => {",
+                  "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "});",
+                  "pm.test(\"Created class is in the list\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\")) return;",
+                  "  const classId = pm.environment.get(\"tutoringClassId\");",
+                  "  const found = pm.response.json().find(c => c.id === classId);",
+                  "  pm.expect(found).to.exist;",
+                  "  pm.expect(found.isTutor).to.be.true;",
+                  "  pm.expect(found.moduleCode).to.be.a(\"string\");",
+                  "  pm.expect(found.enrolledCount).to.be.a(\"number\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Classes - No Token (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"403 without auth token\", () => {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register User 2 for Tutoring",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"tutoringEmail2\", \"tutor2-\" + Date.now() + \"@u.nus.edu.sg\");",
+                  "pm.environment.set(\"tutoringNusId2\", \"T\" + Date.now().toString().slice(-7) + \"Y\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on registration\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nusStudentId\": \"{{tutoringNusId2}}\",\n  \"firstName\": \"Student\",\n  \"lastName\": \"Two\",\n  \"email\": \"{{tutoringEmail2}}\",\n  \"phone\": \"91000002\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login User 2 for Tutoring",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on login\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.environment.set(\"tutoringToken2\", pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{tutoringEmail2}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enroll in Tutoring Class",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on enrollment\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"enrolled is true\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().enrolled).to.be.true;",
+                  "});",
+                  "pm.test(\"enrolledCount incremented\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().enrolledCount).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "enroll"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enroll Again - Already Enrolled",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on duplicate enrollment\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"alreadyEnrolled is true\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().alreadyEnrolled).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "enroll"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tutor Cannot Enroll Own Class (400)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when tutor enrolls own class\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Tutor cannot enroll in their own class\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/enroll",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "enroll"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Classes - Student Sees Enrolled=True",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 response\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Student sees enrolled=true for their class\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  const classId = pm.environment.get(\"tutoringClassId\");",
+                  "  const found = pm.response.json().find(c => c.id === classId);",
+                  "  pm.expect(found).to.exist;",
+                  "  pm.expect(found.enrolled).to.be.true;",
+                  "  pm.expect(found.isTutor).to.be.false;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Leave Tutoring Class",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on leave\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"enrolled is false\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().enrolled).to.be.false;",
+                  "});",
+                  "pm.test(\"enrolledCount decremented\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().enrolledCount).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "leave"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Leave Again - Already Left",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on double leave\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"alreadyLeft is true\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().alreadyLeft).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "leave"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tutor Cannot Leave Own Class (400)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 when tutor tries to leave own class\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Tutor cannot leave their own class\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}/leave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}",
+                "leave"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Non-Owner Cannot Delete Class (403)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"403 when non-owner deletes class\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"Returns correct error\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"tutoringToken2\")) return;",
+                  "  pm.expect(pm.response.json().error).to.eql(\"Not authorized to delete this tutoring class\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tutoringToken2}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Class Not Found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"404 when class not found\", () => {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cleanup: Delete Tutoring Class",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) {",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 on cleanup\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"deleted is true\", () => {",
+                  "  if (!pm.environment.get(\"tutoringClassId\") || !pm.environment.get(\"authToken\")) return;",
+                  "  pm.expect(pm.response.json().deleted).to.be.true;",
+                  "});",
+                  "pm.environment.set(\"tutoringClassId\", \"\");",
+                  "pm.environment.set(\"tutoringToken2\", \"\");",
+                  "pm.environment.set(\"tutoringEmail2\", \"\");",
+                  "pm.environment.set(\"tutoringNusId2\", \"\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tutoring/classes/{{tutoringClassId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tutoring",
+                "classes",
+                "{{tutoringClassId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

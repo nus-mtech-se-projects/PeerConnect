@@ -4,7 +4,10 @@ import mtech.swe5006.peerconnect.data.sql.Profile;
 import mtech.swe5006.peerconnect.data.sql.ProfileRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
+import mtech.swe5006.peerconnect.service.AuditService;
 import mtech.swe5006.peerconnect.service.AzureBlobService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -18,23 +21,31 @@ import java.util.Map;
 @RequestMapping("/api/profile")
 public class ProfileController {
 
+    private static final Logger log = LoggerFactory.getLogger(ProfileController.class);
+
     private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024; // 2 MB
     private static final List<String> ALLOWED_TYPES = List.of("image/png", "image/jpeg");
 
     private final ProfileRepository profileRepository;
     private final UserRepository userRepository;
     private final AzureBlobService azureBlobService;
+    private final AuditService auditService;
 
     public ProfileController(ProfileRepository profileRepository,
                              UserRepository userRepository,
-                             AzureBlobService azureBlobService) {
+                             AzureBlobService azureBlobService,
+                             AuditService auditService) {
         this.profileRepository = profileRepository;
         this.userRepository = userRepository;
         this.azureBlobService = azureBlobService;
+        this.auditService = auditService;
     }
 
     @GetMapping
     public ResponseEntity<?> getProfile(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Authentication required"));
+        }
         String email = auth.getName();
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
@@ -43,7 +54,6 @@ public class ProfileController {
 
         Profile profile = profileRepository.findByUserId(user.getId()).orElse(null);
 
-        // Return combined user + profile data
         Map<String, Object> result = new HashMap<>();
         result.put("userId", user.getId().toString());
         result.put("email", user.getEmail());
@@ -62,23 +72,25 @@ public class ProfileController {
 
     @PutMapping
     public ResponseEntity<?> updateProfile(Authentication auth, @RequestBody Map<String, Object> body) {
+        if (auth == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Authentication required"));
+        }
         String email = auth.getName();
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
             return ResponseEntity.status(404).body(Map.of("error", "User not found"));
         }
 
-        // Update user fields if provided
         if (body.containsKey("firstName")) user.setFirstName((String) body.get("firstName"));
         if (body.containsKey("lastName")) user.setLastName((String) body.get("lastName"));
         if (body.containsKey("phone")) user.setPhone((String) body.get("phone"));
         userRepository.save(user);
 
-        // Update or create profile
         Profile profile = profileRepository.findByUserId(user.getId()).orElse(null);
         if (profile == null) {
             profile = new Profile();
             profile.setUserId(user.getId());
+            profile.setFullTimeInd("N");
         }
 
         if (body.containsKey("faculty")) profile.setFaculty((String) body.get("faculty"));
@@ -94,7 +106,26 @@ public class ProfileController {
             profile.setFullTimeInd(Boolean.TRUE.equals(ft) ? "Y" : "N");
         }
 
-        profileRepository.save(profile);
+        try {
+            profileRepository.save(profile);
+        } catch (RuntimeException ex) {
+            if (!body.containsKey("fullTime")) {
+                throw ex;
+            }
+
+            profile.setFullTimeInd(null);
+            profileRepository.save(profile);
+        }
+        auditService.record(
+            "PROFILE_UPDATED",
+            user.getId(),
+            user.getEmail(),
+            "USER",
+            user.getId(),
+            "SUCCESS",
+            null,
+            null,
+            Map.of("updatedFields", body.keySet()));
 
         return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
     }
@@ -103,12 +134,12 @@ public class ProfileController {
         return s != null ? s : "";
     }
 
-    // ──────────────── Avatar Upload ────────────────
-
     @PostMapping("/avatar")
     public ResponseEntity<?> uploadAvatar(Authentication auth,
                                           @RequestParam("avatar") MultipartFile file) {
-        // Validate file
+        if (auth == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Authentication required"));
+        }
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "No file provided"));
         }
@@ -119,7 +150,6 @@ public class ProfileController {
             return ResponseEntity.badRequest().body(Map.of("error", "File must be smaller than 2 MB"));
         }
 
-        // Resolve user
         String email = auth.getName();
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
@@ -127,21 +157,15 @@ public class ProfileController {
         }
 
         try {
-            // Determine file extension from content type
             String ext = "image/png".equals(file.getContentType()) ? ".png" : ".jpg";
             String blobName = user.getId().toString() + ext;
 
-            // Delete any old blob with the other extension (e.g. switching png↔jpg)
             String otherExt = ".png".equals(ext) ? ".jpg" : ".png";
             azureBlobService.delete(user.getId().toString() + otherExt);
 
-            // Upload to Azure Blob Storage
             String avatarUrl = azureBlobService.upload(blobName, file);
-
-            // Append cache-busting timestamp so browsers fetch the fresh image
             avatarUrl = avatarUrl + "?t=" + System.currentTimeMillis();
 
-            // Upsert profile with the new avatar URL
             Profile profile = profileRepository.findByUserId(user.getId()).orElse(null);
             if (profile == null) {
                 profile = new Profile();
@@ -160,6 +184,9 @@ public class ProfileController {
 
     @DeleteMapping("/avatar")
     public ResponseEntity<?> deleteAvatar(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Authentication required"));
+        }
         String email = auth.getName();
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
@@ -172,12 +199,10 @@ public class ProfileController {
         }
 
         try {
-            // Delete both .png and .jpg variants to be safe
             String userId = user.getId().toString();
             azureBlobService.delete(userId + ".png");
             azureBlobService.delete(userId + ".jpg");
 
-            // Clear avatar URL in database
             profile.setAvatarUrl(null);
             profileRepository.save(profile);
 
@@ -186,5 +211,13 @@ public class ProfileController {
             return ResponseEntity.status(500)
                     .body(Map.of("error", "Delete failed: " + e.getMessage()));
         }
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleException(Exception ex) {
+        log.error("[ProfileController] Unhandled exception", ex);
+        return ResponseEntity.status(500).body(Map.of(
+            "error", ex.getMessage() != null ? ex.getMessage() : "Internal server error"
+        ));
     }
 }

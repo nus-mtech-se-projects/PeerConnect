@@ -5,6 +5,8 @@ import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.models.BlobHttpHeaders;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,22 +16,42 @@ import java.io.IOException;
 @Service
 public class AzureBlobService {
 
-    private final BlobContainerClient containerClient;
+    private static final Logger log = LoggerFactory.getLogger(AzureBlobService.class);
 
-    public AzureBlobService(
+    private final BlobContainerClient containerClient;
+    private final boolean enabled;
+
+        public AzureBlobService(
+            @Value("${azure.storage.enabled:false}") boolean enabled,
             @Value("${azure.storage.connection_string}") String connectionString,
             @Value("${azure.storage.container_name:avatars}") String containerName) {
 
-        BlobServiceClient serviceClient = new BlobServiceClientBuilder()
-                .connectionString(connectionString)
-                .buildClient();
+        BlobContainerClient resolvedContainerClient = null;
+        boolean resolvedEnabled = false;
+        boolean hasConnectionString = connectionString != null && !connectionString.isBlank();
+        if (!hasConnectionString) {
+            if (enabled) {
+                log.warn("Azure storage is enabled but no connection string is configured. Disabling blob integration.");
+            }
+        } else {
+            try {
+                BlobServiceClient serviceClient = new BlobServiceClientBuilder()
+                        .connectionString(connectionString)
+                        .buildClient();
 
-        this.containerClient = serviceClient.getBlobContainerClient(containerName);
+                resolvedContainerClient = serviceClient.getBlobContainerClient(containerName);
 
-        // Create the container if it doesn't exist
-        if (!containerClient.exists()) {
-            containerClient.create();
+                if (!resolvedContainerClient.exists()) {
+                    resolvedContainerClient.create();
+                }
+                resolvedEnabled = true;
+            } catch (IllegalArgumentException ex) {
+                log.warn("Azure storage connection string is invalid. Disabling blob integration.", ex);
+            }
         }
+
+        this.containerClient = resolvedContainerClient;
+        this.enabled = resolvedEnabled;
     }
 
     /**
@@ -40,6 +62,9 @@ public class AzureBlobService {
      * @return the public URL of the uploaded blob
      */
     public String upload(String blobName, MultipartFile file) throws IOException {
+        if (!enabled || containerClient == null) {
+            throw new IllegalStateException("Azure storage is disabled");
+        }
         BlobClient blobClient = containerClient.getBlobClient(blobName);
 
         // Set content type so the blob is served correctly in browsers
@@ -56,6 +81,9 @@ public class AzureBlobService {
      * Delete a blob if it exists.
      */
     public void delete(String blobName) {
+        if (!enabled || containerClient == null) {
+            return;
+        }
         BlobClient blobClient = containerClient.getBlobClient(blobName);
         blobClient.deleteIfExists();
     }

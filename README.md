@@ -10,6 +10,15 @@ Run locally:
 ./gradlew bootRun
 ```
 
+If `bootRun` fails on Azure SQL schema validation for `peer_feedback` or `study_groups.preferred_schedule`, apply [data/migrations/2026-03-21_repair_azure_sql_schema.sql](data/migrations/2026-03-21_repair_azure_sql_schema.sql) to the target database first.
+
+Audit trail migration:
+- apply [data/migrations/2026-03-27_create_audit_event.sql](data/migrations/2026-03-27_create_audit_event.sql) to the target database before starting the app with schema validation enabled.
+
+Optional telemetry integrations:
+- Azure Monitor activates automatically when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set.
+- Sentry can be enabled through Spring environment variables such as `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, and `SENTRY_RELEASE`.
+
 Build a runnable jar:
 ```
 ./gradlew build

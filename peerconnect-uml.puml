@@ -1,0 +1,411 @@
+@startuml PeerConnect Class Diagram
+!theme plain
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam groupInheritance 2
+
+title PeerConnect – Java Class & Relationship Diagram
+
+' ─────────────────────────────────────────────
+' PACKAGE: data/sql  (Entities)
+' ─────────────────────────────────────────────
+package "data.sql (Entities)" #E8F4FD {
+
+  abstract class BaseEntity {
+    # id : UUID
+    # createdAt : LocalDateTime
+    --
+    + getId() : UUID
+    + getCreatedAt() : LocalDateTime
+    ~ prePersist()
+  }
+
+  class User {
+    - id : UUID
+    - nusStudentId : String
+    - firstName : String
+    - lastName : String
+    - email : String
+    - phone : String
+    - passwordHash : String
+    - userType : String   ' "student" | "tutor"
+    - status : String     ' "active" | etc.
+    - createdAt : LocalDateTime
+    - updatedAt : LocalDateTime
+  }
+
+  class Profile {
+    - userId : UUID        <<FK → User>>
+    - faculty : String
+    - major : String
+    - yearOfStudy : Short
+    - bio : String
+    - avatarUrl : String
+    - fullTimeInd : String
+  }
+
+  class StudyGroup {
+    - id : UUID
+    - name : String
+    - topic : String
+    - moduleCode : String
+    - description : String
+    - studyMode : String   ' "online" | "in-person"
+    - location : String
+    - meetingLink : String
+    - preferredSchedule : LocalDateTime
+    - createdBy : UUID     <<FK → User>>
+    - maxMembers : Short
+    - status : String      ' "active" | "dissolved"
+    - approvalRequired : Boolean
+    - createdAt : LocalDateTime
+  }
+
+  class StudyGroupMember {
+    - id : UUID
+    - groupId : UUID       <<FK → StudyGroup>>
+    - userId : UUID        <<FK → User>>
+    - role : String        ' "owner" | "member"
+    - membershipStatus : String  ' "invited" | "pending" | "approved"
+    - joinedAt : LocalDateTime
+  }
+
+  class StudySession {
+    ' extends BaseEntity
+    - groupId : UUID       <<FK → StudyGroup>>
+    - title : String
+    - notes : String
+    - startsAt : LocalDateTime
+    - endsAt : LocalDateTime
+    - location : String
+    - meetingLink : String
+    - createdBy : UUID     <<FK → User>>
+  }
+
+  class TutoringClass {
+    - id : UUID
+    - title : String
+    - moduleCode : String
+    - topic : String
+    - description : String
+    - schedule : String
+    - mode : String        ' "online" | "in-person"
+    - location : String
+    - meetingLink : String
+    - maxStudents : Short
+    - createdBy : UUID     <<FK → User>>
+    - tutorId : UUID       <<FK → User>>
+    - createdAt : LocalDateTime
+  }
+
+  class TutoringEnrollment {
+    - id : UUID
+    - classId : UUID       <<FK → TutoringClass>>
+    - userId : UUID        <<FK → User>>
+    - joinedAt : LocalDateTime
+  }
+
+  class PeerFeedback {
+    - id : UUID
+    - peerTutorGroupId : UUID
+    - sessionId : UUID     <<FK → StudySession>>
+    - reviewerId : UUID    <<FK → User>>
+    - revieweeId : UUID    <<FK → User>>
+    - overallRating : Short
+    - preparedness : Short
+    - communication : Short
+    - helpfulness : Short
+    - reliability : Short
+    - strengths : String
+    - improvements : String
+    - anonymousToPeer : Boolean
+    - createdAt : LocalDateTime
+  }
+
+  class PasswordResetToken {
+    ' extends BaseEntity
+    - userId : UUID        <<FK → User>>
+    - token : String
+    - expiry : LocalDateTime
+    - usedAt : LocalDateTime
+  }
+
+  class RestrictedUser {
+    - blockerId : UUID     <<FK → User>>
+    - blockedId : UUID     <<FK → User>>
+    - createdAt : LocalDateTime
+  }
+
+  class SqlItem {
+    - id : Long
+    - name : String
+  }
+
+  ' ── Inheritance ──
+  BaseEntity <|-- StudySession
+  BaseEntity <|-- PasswordResetToken
+
+  ' ── FK Relationships (data-level) ──
+  User "1" <-- "0..*" Profile           : userId
+  User "1" <-- "0..*" StudyGroup        : createdBy
+  User "1" <-- "0..*" StudyGroupMember  : userId
+  StudyGroup "1" <-- "0..*" StudyGroupMember : groupId
+  StudyGroup "1" <-- "0..*" StudySession     : groupId
+  User "1" <-- "0..*" StudySession      : createdBy
+  User "1" <-- "0..*" TutoringClass     : tutorId / createdBy
+  TutoringClass "1" <-- "0..*" TutoringEnrollment : classId
+  User "1" <-- "0..*" TutoringEnrollment : userId
+  StudySession "1" <-- "0..*" PeerFeedback : sessionId
+  User "1" <-- "0..*" PeerFeedback      : reviewer / reviewee
+  User "1" <-- "0..*" PasswordResetToken : userId
+  User "1" <-- "0..*" RestrictedUser    : blocker / blocked
+}
+
+' ─────────────────────────────────────────────
+' PACKAGE: data/sql  (Repositories – Spring Data JPA interfaces)
+' ─────────────────────────────────────────────
+package "data.sql (Repositories)" #FFF3E0 {
+
+  interface UserRepository <<JpaRepository>>
+  interface ProfileRepository <<JpaRepository>>
+  interface StudyGroupRepository <<JpaRepository>>
+  interface StudyGroupMemberRepository <<JpaRepository>>
+  interface StudySessionRepository <<JpaRepository>>
+  interface TutoringClassRepository <<JpaRepository>>
+  interface TutoringEnrollmentRepository <<JpaRepository>>
+  interface PeerFeedbackRepository <<JpaRepository>>
+  interface PasswordResetTokenRepository <<JpaRepository>>
+  interface RestrictedUserRepository <<JpaRepository>>
+  interface SqlItemRepository <<JpaRepository>>
+
+  ' Each repository manages its entity
+  UserRepository ..> User
+  ProfileRepository ..> Profile
+  StudyGroupRepository ..> StudyGroup
+  StudyGroupMemberRepository ..> StudyGroupMember
+  StudySessionRepository ..> StudySession
+  TutoringClassRepository ..> TutoringClass
+  TutoringEnrollmentRepository ..> TutoringEnrollment
+  PeerFeedbackRepository ..> PeerFeedback
+  PasswordResetTokenRepository ..> PasswordResetToken
+  RestrictedUserRepository ..> RestrictedUser
+  SqlItemRepository ..> SqlItem
+}
+
+' ─────────────────────────────────────────────
+' PACKAGE: security
+' ─────────────────────────────────────────────
+package "security" #EDE7F6 {
+
+  class JwtService <<@Service>> {
+    - algorithm : Algorithm
+    - verifier : JWTVerifier
+    - accessTokenMinutes : long
+    --
+    + generateAccessToken(username) : String
+    + isValid(token) : boolean
+    + extractUsername(token) : String
+    + expiresInSeconds() : long
+  }
+
+  class JwtAuthFilter <<@Component>> {
+    ' extends OncePerRequestFilter
+    - jwtService : JwtService
+    - userDetailsService : CustomUserDetailsService
+    --
+    # doFilterInternal(request, response, chain)
+  }
+
+  class CustomUserDetailsService <<@Service>> {
+    ' implements UserDetailsService
+    - userRepository : UserRepository
+    --
+    + loadUserByUsername(email) : UserDetails
+  }
+
+  class SecurityConfig <<@Configuration>> {
+    - jwtAuthFilter : JwtAuthFilter
+    --
+    + securityFilterChain(http) : SecurityFilterChain
+    + corsConfigurationSource() : CorsConfigurationSource
+    + passwordEncoder() : PasswordEncoder
+    + authenticationManager(...) : AuthenticationManager
+  }
+
+  ' Internal wiring
+  JwtAuthFilter --> JwtService
+  JwtAuthFilter --> CustomUserDetailsService
+  SecurityConfig --> JwtAuthFilter
+  CustomUserDetailsService --> UserRepository
+}
+
+' ─────────────────────────────────────────────
+' PACKAGE: service
+' ─────────────────────────────────────────────
+package "service" #E8F5E9 {
+
+  class EmailService <<@Service>> {
+    --
+    + sendGroupInvitation(...)
+    + sendMemberApproved(...)
+    + sendMemberRejected(...)
+    + sendGroupDissolved(...)
+    + sendPasswordReset(...)
+  }
+
+  class AzureBlobService <<@Service>> {
+    --
+    + uploadAvatar(file, userId) : String
+    + deleteAvatar(url)
+  }
+
+  class SqlItemService <<@Service>> {
+    - sqlItemRepository : SqlItemRepository
+    --
+    + findAll() : List<SqlItem>
+    + save(item) : SqlItem
+  }
+
+  SqlItemService --> SqlItemRepository
+}
+
+' ─────────────────────────────────────────────
+' PACKAGE: dto
+' ─────────────────────────────────────────────
+package "dto" #FFF8E1 {
+
+  class AuthDtos <<utility>> {
+    + record RegisterRequest(username, password)
+    + record LoginRequest(username, password)
+    + record TokenResponse(accessToken, tokenType, expiresInSeconds)
+    + record MeResponse(id, username)
+  }
+
+  class ItemRequest {
+    + name : String
+  }
+}
+
+' ─────────────────────────────────────────────
+' PACKAGE: api (Controllers)
+' ─────────────────────────────────────────────
+package "api (Controllers)" #FCE4EC {
+
+  class ControllerUtils <<utility>> {
+    ' static helpers used by controllers
+    + {static} resolveUser(auth, userRepo) : User
+    + {static} asString(map, key) : String
+    + {static} asBoolean(map, key) : Boolean
+    + {static} asShort(map, key) : Short
+    + {static} firstNonBlank(...) : String
+  }
+
+  class BaseTemplate {
+    ' optional base / shared logic
+  }
+
+  class AuthController <<@RestController>> {
+    ' POST /api/auth/register
+    ' POST /api/auth/login
+    ' POST /api/auth/forgot-password
+    ' POST /api/auth/reset-password
+    - userRepository : UserRepository
+    - passwordEncoder : PasswordEncoder
+    - jwtService : JwtService
+    - resetTokenRepository : PasswordResetTokenRepository
+    - emailService : EmailService
+  }
+
+  class GroupController <<@RestController>> {
+    ' GET/POST /api/groups
+    ' PUT/DELETE /api/groups/{id}
+    ' POST /api/groups/{id}/sessions
+    ' PUT/DELETE /api/groups/{id}/sessions/{sid}
+    ' POST /api/groups/{id}/members
+    - studyGroupRepository : StudyGroupRepository
+    - studyGroupMemberRepository : StudyGroupMemberRepository
+    - studySessionRepository : StudySessionRepository
+    - userRepository : UserRepository
+    - restrictedUserRepository : RestrictedUserRepository
+    - emailService : EmailService
+    - jdbcTemplate : JdbcTemplate
+  }
+
+  class ProfileController <<@RestController>> {
+    ' GET/PUT /api/profile
+    ' POST /api/profile/avatar
+    - profileRepository : ProfileRepository
+    - userRepository : UserRepository
+    - azureBlobService : AzureBlobService
+  }
+
+  class TutoringController <<@RestController>> {
+    ' GET/POST /api/tutoring/classes
+    ' POST /api/tutoring/classes/{id}/enroll
+    ' POST /api/tutoring/feedback
+    - tutoringClassRepository : TutoringClassRepository
+    - tutoringEnrollmentRepository : TutoringEnrollmentRepository
+    - userRepository : UserRepository
+    - peerFeedbackRepository : PeerFeedbackRepository
+    - jdbcTemplate : JdbcTemplate
+  }
+
+  class UserController <<@RestController>> {
+    ' GET /api/users
+    - userRepository : UserRepository
+  }
+
+  class RestrictedUserController <<@RestController>> {
+    ' POST/DELETE /api/blocked-users
+    - restrictedUserRepository : RestrictedUserRepository
+    - userRepository : UserRepository
+  }
+
+  class SqlItemController <<@RestController>> {
+    ' CRUD /api/items
+    - sqlItemService : SqlItemService
+  }
+
+  class RootController <<@RestController>> {
+    ' GET /
+  }
+
+  ' ─── Controller → Repository dependencies ───
+  AuthController --> UserRepository
+  AuthController --> PasswordResetTokenRepository
+  AuthController --> JwtService
+  AuthController --> EmailService
+  AuthController ..> AuthDtos
+
+  GroupController --> StudyGroupRepository
+  GroupController --> StudyGroupMemberRepository
+  GroupController --> StudySessionRepository
+  GroupController --> UserRepository
+  GroupController --> RestrictedUserRepository
+  GroupController --> EmailService
+  GroupController ..> ControllerUtils
+
+  ProfileController --> ProfileRepository
+  ProfileController --> UserRepository
+  ProfileController --> AzureBlobService
+
+  TutoringController --> TutoringClassRepository
+  TutoringController --> TutoringEnrollmentRepository
+  TutoringController --> UserRepository
+  TutoringController --> PeerFeedbackRepository
+
+  UserController --> UserRepository
+  RestrictedUserController --> RestrictedUserRepository
+  RestrictedUserController --> UserRepository
+  SqlItemController --> SqlItemService
+}
+
+' ─────────────────────────────────────────────
+' MAIN APPLICATION
+' ─────────────────────────────────────────────
+class PeerconnectApplication <<@SpringBootApplication>> {
+  + {static} main(args : String[])
+}
+
+@enduml

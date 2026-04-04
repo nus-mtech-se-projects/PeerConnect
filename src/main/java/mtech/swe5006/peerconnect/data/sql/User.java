@@ -1,9 +1,15 @@
 package mtech.swe5006.peerconnect.data.sql;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
-import mtech.swe5006.peerconnect.data.sql.UserRepository;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+//import mtech.swe5006.peerconnect.data.sql.UserRepository;
 @Entity
 @Table(name = "users")
 public class User {

@@ -1,0 +1,332 @@
+classDiagram
+    %% ════════════════════════════════
+    %% ENTITIES
+    %% ════════════════════════════════
+    class BaseEntity {
+        #UUID id
+        #LocalDateTime createdAt
+        +getId() UUID
+        +getCreatedAt() LocalDateTime
+    }
+
+    class User {
+        -UUID id
+        -String nusStudentId
+        -String firstName
+        -String lastName
+        -String email
+        -String passwordHash
+        -String userType
+        -String status
+        -LocalDateTime createdAt
+        -LocalDateTime updatedAt
+    }
+
+    class Profile {
+        -UUID userId
+        -String faculty
+        -String major
+        -Short yearOfStudy
+        -String bio
+        -String avatarUrl
+        -String fullTimeInd
+    }
+
+    class StudyGroup {
+        -UUID id
+        -String name
+        -String topic
+        -String moduleCode
+        -String studyMode
+        -String status
+        -UUID createdBy
+        -Short maxMembers
+        -Boolean approvalRequired
+        -LocalDateTime createdAt
+    }
+
+    class StudyGroupMember {
+        -UUID id
+        -UUID groupId
+        -UUID userId
+        -String role
+        -String membershipStatus
+        -LocalDateTime joinedAt
+    }
+
+    class StudySession {
+        -UUID groupId
+        -String title
+        -String notes
+        -LocalDateTime startsAt
+        -LocalDateTime endsAt
+        -String location
+        -String meetingLink
+        -UUID createdBy
+    }
+
+    class TutoringClass {
+        -UUID id
+        -String title
+        -String moduleCode
+        -String topic
+        -String mode
+        -UUID tutorId
+        -UUID createdBy
+        -Short maxStudents
+        -LocalDateTime createdAt
+    }
+
+    class TutoringEnrollment {
+        -UUID id
+        -UUID classId
+        -UUID userId
+        -LocalDateTime joinedAt
+    }
+
+    class PeerFeedback {
+        -UUID id
+        -UUID sessionId
+        -UUID reviewerId
+        -UUID revieweeId
+        -Short overallRating
+        -Short preparedness
+        -Short communication
+        -Short helpfulness
+        -Short reliability
+        -Boolean anonymousToPeer
+    }
+
+    class PasswordResetToken {
+        -UUID userId
+        -String token
+        -LocalDateTime expiry
+        -LocalDateTime usedAt
+    }
+
+    class RestrictedUser {
+        -UUID blockerId
+        -UUID blockedId
+        -LocalDateTime createdAt
+    }
+
+    class SqlItem {
+        -Long id
+        -String name
+    }
+
+    %% ── Inheritance (BaseEntity is the parent) ──
+    BaseEntity <|-- StudySession
+    BaseEntity <|-- PasswordResetToken
+
+    %% ── Entity relationships ──
+    User "1" --> "0..*" Profile : has profile
+    User "1" --> "0..*" StudyGroup : creates
+    User "1" --> "0..*" StudyGroupMember : joins as
+    StudyGroup "1" --> "0..*" StudyGroupMember : has members
+    StudyGroup "1" --> "0..*" StudySession : has sessions
+    User "1" --> "0..*" TutoringClass : tutors
+    TutoringClass "1" --> "0..*" TutoringEnrollment : has enrollments
+    User "1" --> "0..*" TutoringEnrollment : enrolls in
+    StudySession "1" --> "0..*" PeerFeedback : reviewed in
+    User "1" --> "0..*" PasswordResetToken : resets via
+    User "1" --> "0..*" RestrictedUser : blocks
+
+    %% ════════════════════════════════
+    %% REPOSITORIES (Spring Data JPA)
+    %% ════════════════════════════════
+    class UserRepository {
+        <<interface>>
+        +findByEmail(email) Optional~User~
+    }
+    class ProfileRepository {
+        <<interface>>
+        +findByUserId(id) Optional~Profile~
+    }
+    class StudyGroupRepository {
+        <<interface>>
+    }
+    class StudyGroupMemberRepository {
+        <<interface>>
+    }
+    class StudySessionRepository {
+        <<interface>>
+    }
+    class TutoringClassRepository {
+        <<interface>>
+    }
+    class TutoringEnrollmentRepository {
+        <<interface>>
+    }
+    class PeerFeedbackRepository {
+        <<interface>>
+    }
+    class PasswordResetTokenRepository {
+        <<interface>>
+    }
+    class RestrictedUserRepository {
+        <<interface>>
+    }
+    class SqlItemRepository {
+        <<interface>>
+    }
+
+    UserRepository ..> User : manages
+    ProfileRepository ..> Profile : manages
+    StudyGroupRepository ..> StudyGroup : manages
+    StudyGroupMemberRepository ..> StudyGroupMember : manages
+    StudySessionRepository ..> StudySession : manages
+    TutoringClassRepository ..> TutoringClass : manages
+    TutoringEnrollmentRepository ..> TutoringEnrollment : manages
+    PeerFeedbackRepository ..> PeerFeedback : manages
+    PasswordResetTokenRepository ..> PasswordResetToken : manages
+    RestrictedUserRepository ..> RestrictedUser : manages
+    SqlItemRepository ..> SqlItem : manages
+
+    %% ════════════════════════════════
+    %% SECURITY
+    %% ════════════════════════════════
+    class JwtService {
+        <<Service>>
+        -Algorithm algorithm
+        -long accessTokenMinutes
+        +generateAccessToken(username) String
+        +isValid(token) boolean
+        +extractUsername(token) String
+        +expiresInSeconds() long
+    }
+
+    class JwtAuthFilter {
+        <<Component>>
+        -JwtService jwtService
+        -CustomUserDetailsService userDetailsService
+        +doFilterInternal(request, response, chain)
+    }
+
+    class CustomUserDetailsService {
+        <<Service>>
+        -UserRepository userRepository
+        +loadUserByUsername(email) UserDetails
+    }
+
+    class SecurityConfig {
+        <<Configuration>>
+        -JwtAuthFilter jwtAuthFilter
+        +securityFilterChain() SecurityFilterChain
+        +passwordEncoder() PasswordEncoder
+        +authenticationManager() AuthenticationManager
+    }
+
+    SecurityConfig --> JwtAuthFilter : wires
+    JwtAuthFilter --> JwtService : validates token
+    JwtAuthFilter --> CustomUserDetailsService : loads user
+    CustomUserDetailsService --> UserRepository : queries DB
+
+    %% ════════════════════════════════
+    %% SERVICES
+    %% ════════════════════════════════
+    class EmailService {
+        <<Service>>
+        +sendGroupInvitation()
+        +sendMemberApproved()
+        +sendMemberRejected()
+        +sendGroupDissolved()
+        +sendPasswordReset()
+    }
+
+    class AzureBlobService {
+        <<Service>>
+        +uploadAvatar(file, userId) String
+        +deleteAvatar(url)
+    }
+
+    class SqlItemService {
+        <<Service>>
+        -SqlItemRepository repo
+        +findAll() List~SqlItem~
+        +save(item) SqlItem
+    }
+
+    SqlItemService --> SqlItemRepository : uses
+
+    %% ════════════════════════════════
+    %% CONTROLLERS (REST API)
+    %% ════════════════════════════════
+    class AuthController {
+        <<RestController>>
+        +register() POST /api/auth/register
+        +login() POST /api/auth/login
+        +forgotPassword() POST /api/auth/forgot-password
+        +resetPassword() POST /api/auth/reset-password
+    }
+
+    class GroupController {
+        <<RestController>>
+        +listGroups() GET /api/groups
+        +createGroup() POST /api/groups
+        +updateGroup() PUT /api/groups/id
+        +dissolveGroup() DELETE /api/groups/id
+        +inviteMember() POST /api/groups/id/members
+        +approveMember() PUT /api/groups/id/members/uid
+        +createSession() POST /api/groups/id/sessions
+        +updateSession() PUT /api/groups/id/sessions/sid
+        +deleteSession() DELETE /api/groups/id/sessions/sid
+    }
+
+    class ProfileController {
+        <<RestController>>
+        +getProfile() GET /api/profile
+        +updateProfile() PUT /api/profile
+        +uploadAvatar() POST /api/profile/avatar
+    }
+
+    class TutoringController {
+        <<RestController>>
+        +listClasses() GET /api/tutoring/classes
+        +createClass() POST /api/tutoring/classes
+        +enroll() POST /api/tutoring/classes/id/enroll
+        +submitFeedback() POST /api/tutoring/feedback
+    }
+
+    class UserController {
+        <<RestController>>
+        +listUsers() GET /api/users
+    }
+
+    class RestrictedUserController {
+        <<RestController>>
+        +blockUser() POST /api/blocked-users
+        +unblockUser() DELETE /api/blocked-users/id
+    }
+
+    class SqlItemController {
+        <<RestController>>
+        +listItems() GET /api/items
+        +createItem() POST /api/items
+    }
+
+    AuthController --> UserRepository : uses
+    AuthController --> PasswordResetTokenRepository : uses
+    AuthController --> JwtService : uses
+    AuthController --> EmailService : uses
+
+    GroupController --> StudyGroupRepository : uses
+    GroupController --> StudyGroupMemberRepository : uses
+    GroupController --> StudySessionRepository : uses
+    GroupController --> UserRepository : uses
+    GroupController --> RestrictedUserRepository : uses
+    GroupController --> EmailService : uses
+
+    ProfileController --> ProfileRepository : uses
+    ProfileController --> UserRepository : uses
+    ProfileController --> AzureBlobService : uses
+
+    TutoringController --> TutoringClassRepository : uses
+    TutoringController --> TutoringEnrollmentRepository : uses
+    TutoringController --> UserRepository : uses
+    TutoringController --> PeerFeedbackRepository : uses
+
+    UserController --> UserRepository : uses
+    RestrictedUserController --> RestrictedUserRepository : uses
+    RestrictedUserController --> UserRepository : uses
+    SqlItemController --> SqlItemService : uses
