@@ -118,16 +118,14 @@ public class AuthController {
     recordAuthEvent("LOGIN_SUCCEEDED", user, user.getEmail(), "SUCCESS", Map.of("loginMethod", loginMethod, "authProvider", "local"));
 
     String token = jwtService.generateAccessToken(user.getEmail());
-    return ResponseEntity.ok(Map.of(
-        "id", user.getId().toString(),
-        "email", user.getEmail(),
-        "nusStudentId", user.getNusStudentId(),
-        "accessToken", token,
-        "expiresInSeconds", jwtService.expiresInSeconds()));
+    return buildLoginSuccessResponse(user, token);
   }
 @PostMapping("/microsoft")
 public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
-    String idToken = body.get("idToken");
+    String idToken = firstNonBlank(
+        body != null ? body.get("idToken") : null,
+        body != null ? body.get("credential") : null,
+        body != null ? body.get("token") : null);
     if (idToken == null || idToken.isBlank()) {
         recordAuthEvent("LOGIN_REJECTED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", "missing_id_token"));
         return ResponseEntity.badRequest().body(Map.of("error", "idToken required"));
@@ -137,8 +135,10 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
         com.nimbusds.jwt.SignedJWT jwt = com.nimbusds.jwt.SignedJWT.parse(idToken);
         var claims = jwt.getJWTClaimsSet();
 
-        String email = claims.getStringClaim("preferred_username");
-        if (email == null) email = claims.getStringClaim("email");
+        String email = firstNonBlank(
+            claims.getStringClaim("preferred_username"),
+            claims.getStringClaim("email"),
+            claims.getStringClaim("upn"));
         String name = claims.getStringClaim("name");
         String oid  = claims.getStringClaim("oid"); // unique MS user ID
 
@@ -147,7 +147,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
             return ResponseEntity.badRequest().body(Map.of("error", "No email in token"));
         }
 
-        final String resolvedEmail = email;
+        final String resolvedEmail = email.trim().toLowerCase();
         final String resolvedOid = oid;
         final String resolvedName = name;
 
@@ -166,11 +166,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
         String token = jwtService.generateAccessToken(user.getEmail());
         recordAuthEvent("LOGIN_SUCCEEDED", user, user.getEmail(), "SUCCESS", Map.of("authProvider", "microsoft"));
-        return ResponseEntity.ok(Map.of(
-            "accessToken", token,
-            "email", user.getEmail(),
-            "expiresInSeconds", jwtService.expiresInSeconds()
-        ));
+        return buildLoginSuccessResponse(user, token);
 
     } catch (Exception e) {
         recordAuthEvent("LOGIN_FAILED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", e.getClass().getSimpleName()));
@@ -316,6 +312,24 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
   private String cooldownKey(String flow, String email) {
     return flow + ":" + email;
+  }
+
+  private String firstNonBlank(String... values) {
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private ResponseEntity<?> buildLoginSuccessResponse(User user, String token) {
+    return ResponseEntity.ok(Map.of(
+        "id", user.getId() != null ? user.getId().toString() : "",
+        "email", user.getEmail() != null ? user.getEmail() : "",
+        "nusStudentId", user.getNusStudentId() != null ? user.getNusStudentId() : "",
+        "accessToken", token,
+        "expiresInSeconds", jwtService.expiresInSeconds()));
   }
 
   /** Generate a 6-digit code, persist it as a PasswordResetToken, and return the code. */

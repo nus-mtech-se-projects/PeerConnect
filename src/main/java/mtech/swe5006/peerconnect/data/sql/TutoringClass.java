@@ -26,6 +26,9 @@ public class TutoringClass {
     @Column(name = "description", length = 2000)
     private String description;
 
+    @Column(name = "status", nullable = false, length = 20)
+    private String status;
+
     @Column(name = "schedule", nullable = false, length = 200)
     private String schedule;
 
@@ -54,6 +57,7 @@ public class TutoringClass {
     void prePersist() {
         if (this.id == null) this.id = UUID.randomUUID();
         if (this.mode == null) this.mode = "online";
+        if (this.status == null) this.status = "active";
         if (this.maxStudents == null) this.maxStudents = 5;
         if (this.createdBy == null) this.createdBy = this.tutorId;
         if (this.tutorId == null) this.tutorId = this.createdBy;
@@ -70,6 +74,8 @@ public class TutoringClass {
     public void setTopic(String topic) { this.topic = topic; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public String getSchedule() { return schedule; }
     public void setSchedule(String schedule) { this.schedule = schedule; }
     public String getMode() { return mode; }
