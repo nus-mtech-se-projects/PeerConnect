@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 public interface StudyGroupMemberRepository extends JpaRepository<StudyGroupMember, UUID> {
     List<StudyGroupMember> findByGroupId(UUID groupId);
     List<StudyGroupMember> findByGroupIdIn(Collection<UUID> groupIds);
+    List<StudyGroupMember> findByUserIdAndMembershipStatus(UUID userId, String membershipStatus);
     List<StudyGroupMember> findByGroupIdAndMembershipStatus(UUID groupId, String membershipStatus);
     Optional<StudyGroupMember> findByGroupIdAndUserId(UUID groupId, UUID userId);
     long countByGroupIdAndMembershipStatus(UUID groupId, String membershipStatus);

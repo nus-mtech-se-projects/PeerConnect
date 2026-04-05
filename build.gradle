@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '4.0.3'
+	id 'org.springframework.boot' version '4.0.4'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'maven-publish'
 	id 'org.sonarqube' version '7.2.2.6593'
@@ -20,6 +20,21 @@ configurations {
 	compileOnly {
 		extendsFrom annotationProcessor
 	}
+}
+
+configurations.configureEach {
+	resolutionStrategy.force(
+		'io.netty:netty-codec-http:4.2.12.Final',
+		'io.netty:netty-codec-http2:4.2.12.Final',
+		'io.netty:netty-codec-http3:4.2.12.Final',
+		'io.netty:netty-handler-proxy:4.2.12.Final',
+		'com.fasterxml.jackson.core:jackson-core:2.21.2',
+		'com.fasterxml.jackson.core:jackson-databind:2.21.2',
+		'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.2',
+		'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.2',
+		'tools.jackson.core:jackson-core:3.1.1',
+		'tools.jackson.core:jackson-databind:3.1.1'
+	)
 }
 
 def githubOwner = findProperty('gpr.owner') ?: System.getenv('GH_PACKAGES_OWNER')
@@ -47,6 +62,22 @@ ext {
 }
 
 dependencies {
+	constraints {
+		implementation('org.springframework.security:spring-security-web:7.0.4')
+		implementation('org.springframework:spring-web:7.0.6')
+		implementation('org.springframework:spring-webmvc:7.0.6')
+		implementation('io.netty:netty-codec-http:4.2.12.Final')
+		implementation('io.netty:netty-codec-http2:4.2.12.Final')
+		implementation('io.netty:netty-codec-http3:4.2.12.Final')
+		implementation('io.netty:netty-handler-proxy:4.2.12.Final')
+		implementation('com.fasterxml.jackson.core:jackson-core:2.21.2')
+		implementation('com.fasterxml.jackson.core:jackson-databind:2.21.2')
+		implementation('com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.2')
+		implementation('com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.2')
+		implementation('tools.jackson.core:jackson-core:3.1.1')
+		implementation('tools.jackson.core:jackson-databind:3.1.1')
+	}
+
 	implementation 'com.auth0:java-jwt:4.4.0'
 	implementation 'com.azure:azure-storage-blob:12.29.1'
 

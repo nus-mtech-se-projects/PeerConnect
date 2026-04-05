@@ -48,6 +48,8 @@ import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import mtech.swe5006.peerconnect.service.AuditService;
 import mtech.swe5006.peerconnect.service.EmailService;
+import mtech.swe5006.peerconnect.service.chat.GroupChatFacade;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @RestController
 @RequestMapping("/api/groups")
@@ -99,6 +101,7 @@ public class GroupController {
     private final AuditService auditService;
     private final EmailService emailService;
     private final RestrictedUserRepository restrictedUserRepository;
+    private final GroupChatFacade groupChatFacade;
 
     public GroupController(StudyGroupRepository groupRepository,
                            StudyGroupMemberRepository groupMemberRepository,
@@ -108,6 +111,20 @@ public class GroupController {
                            AuditService auditService,
                            EmailService emailService,
                            RestrictedUserRepository restrictedUserRepository) {
+        this(groupRepository, groupMemberRepository, studySessionRepository, userRepository, jdbcTemplate,
+            auditService, emailService, restrictedUserRepository, null);
+    }
+
+    @Autowired
+    public GroupController(StudyGroupRepository groupRepository,
+                           StudyGroupMemberRepository groupMemberRepository,
+                           StudySessionRepository studySessionRepository,
+                           UserRepository userRepository,
+                           JdbcTemplate jdbcTemplate,
+                           AuditService auditService,
+                           EmailService emailService,
+                           RestrictedUserRepository restrictedUserRepository,
+                           GroupChatFacade groupChatFacade) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.studySessionRepository = studySessionRepository;
@@ -116,6 +133,7 @@ public class GroupController {
         this.auditService = auditService;
         this.emailService = emailService;
         this.restrictedUserRepository = restrictedUserRepository;
+        this.groupChatFacade = groupChatFacade;
     }
 
     @GetMapping
@@ -243,6 +261,14 @@ public class GroupController {
         } catch (Exception ex) {
             log.error("[StudyGroup] FAILED to save owner membership: {}", ex.getMessage(), ex);
             // Group was saved; return success but log the member insert failure
+        }
+
+        if (groupChatFacade != null) {
+            try {
+                groupChatFacade.initializeChatForGroup(group);
+            } catch (Exception ex) {
+                log.warn("[StudyGroup] Failed to initialize chat for group {}: {}", group.getId(), ex.getMessage());
+            }
         }
 
         auditService.record(
