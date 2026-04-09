@@ -121,11 +121,51 @@ public class AuthController {
     return buildLoginSuccessResponse(user, token);
   }
 @PostMapping("/microsoft")
-public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
+@SuppressWarnings("unchecked")
+public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, Object> body) {
+    // New flow: Azure Static Web Apps clientPrincipal format
+    if (body != null && body.containsKey("clientPrincipal")) {
+        try {
+            Map<String, Object> cp = (Map<String, Object>) body.get("clientPrincipal");
+            String email = cp != null ? (String) cp.get("userDetails") : null;
+            String userId = cp != null ? (String) cp.get("userId") : null;
+
+            if (email == null || email.isBlank()) {
+                recordAuthEvent("LOGIN_REJECTED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", "missing_email_in_clientPrincipal"));
+                return ResponseEntity.badRequest().body(Map.of("error", "No email in clientPrincipal"));
+            }
+
+            final String resolvedEmail = email.trim().toLowerCase();
+            final String resolvedUserId = userId;
+
+            User user = userRepository.findByEmail(resolvedEmail).orElseGet(() -> {
+                User u = new User();
+                u.setEmail(resolvedEmail);
+                u.setPasswordHash("");
+                if (resolvedUserId != null) u.setNusStudentId("MS-" + resolvedUserId);
+                u.setFirstName("");
+                u.setLastName("");
+                u.setUserType("student");
+                u.setStatus("active");
+                return userRepository.save(u);
+            });
+
+            String token = jwtService.generateAccessToken(user.getEmail());
+            recordAuthEvent("LOGIN_SUCCEEDED", user, user.getEmail(), "SUCCESS", Map.of("authProvider", "microsoft"));
+            return buildLoginSuccessResponse(user, token);
+
+        } catch (Exception e) {
+            recordAuthEvent("LOGIN_FAILED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", e.getClass().getSimpleName()));
+            log.error("[MicrosoftLogin] ClientPrincipal flow failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+            return ResponseEntity.status(400).body(Map.of("error", "Microsoft login failed. Please try again."));
+        }
+    }
+
+    // Legacy flow: raw idToken JWT
     String idToken = firstNonBlank(
-        body != null ? body.get("idToken") : null,
-        body != null ? body.get("credential") : null,
-        body != null ? body.get("token") : null);
+        body != null ? (String) body.get("idToken") : null,
+        body != null ? (String) body.get("credential") : null,
+        body != null ? (String) body.get("token") : null);
     if (idToken == null || idToken.isBlank()) {
         recordAuthEvent("LOGIN_REJECTED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", "missing_id_token"));
         return ResponseEntity.badRequest().body(Map.of("error", "idToken required"));
@@ -140,7 +180,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
             claims.getStringClaim("email"),
             claims.getStringClaim("upn"));
         String name = claims.getStringClaim("name");
-        String oid  = claims.getStringClaim("oid"); // unique MS user ID
+        String oid  = claims.getStringClaim("oid");
 
         if (email == null) {
             recordAuthEvent("LOGIN_REJECTED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", "missing_email_claim"));
@@ -154,7 +194,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
         User user = userRepository.findByEmail(resolvedEmail).orElseGet(() -> {
             User u = new User();
             u.setEmail(resolvedEmail);
-            u.setPasswordHash("");           // no password for OAuth users
+            u.setPasswordHash("");
             if (resolvedOid != null) u.setNusStudentId("MS-" + resolvedOid);
             u.setFirstName(resolvedName != null ? resolvedName.split(" ")[0] : "");
             u.setLastName(resolvedName != null && resolvedName.contains(" ")
@@ -170,7 +210,7 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, String> body) {
 
     } catch (Exception e) {
         recordAuthEvent("LOGIN_FAILED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", e.getClass().getSimpleName()));
-        log.error("[MicrosoftLogin] Failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+        log.error("[MicrosoftLogin] IdToken flow failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
         return ResponseEntity.status(400).body(Map.of("error", "Microsoft login failed. Please try again."));
     }
 }
