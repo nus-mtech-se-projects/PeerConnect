@@ -376,51 +376,29 @@ class AuthControllerTest {
     @Nested
     @DisplayName("POST /api/auth/microsoft")
     class MicrosoftLogin {
-        // 256-bit minimum secret for HS256 test JWTs
-        private static final byte[] TEST_SECRET = "super-secret-key-that-is-at-least-32-bytes!!".getBytes();
 
-        /**
-         * Helper: builds a signed JWT with the given claims.
-         * The controller only parses (no signature verification), so HS256 + dummy
-         * secret works.
-         */
-        private String buildIdToken(Map<String, Object> claims) throws Exception {
-            JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder()
-                    .issuer("https://login.microsoftonline.com/test-tenant/v2.0")
-                    .audience("test-client-id")
-                    .expirationTime(new Date(System.currentTimeMillis() + 300_000));
-
-            claims.forEach(builder::claim);
-
-            SignedJWT signedJWT = new SignedJWT(
-                    new JWSHeader(JWSAlgorithm.HS256),
-                    builder.build());
-            signedJWT.sign(new MACSigner(TEST_SECRET));
-            return signedJWT.serialize();
-        }
-
-        // ── Happy-path tests ────────────────────────────────────────
+        // ── clientPrincipal flow (Azure Static Web Apps) ────────────
 
         @Test
-        @DisplayName("200 + token for existing user via preferred_username")
-        void microsoftLogin_existingUser_returnsToken() throws Exception {
-            String idToken = buildIdToken(Map.of(
-                    "preferred_username", "alice@u.nus.edu",
-                    "name", "Alice Tan",
-                    "oid", "ms-oid-123"));
+        @DisplayName("200 + token for existing user via clientPrincipal")
+        void clientPrincipal_existingUser_returnsToken() {
+            Map<String, Object> cp = Map.of(
+                    "identityProvider", "aad",
+                    "userId", "swa-uid-123",
+                    "userDetails", "alice@u.nus.edu",
+                    "userRoles", java.util.List.of("authenticated", "anonymous"));
 
-            when(userRepository.findByEmail("alice@u.nus.edu"))
-                    .thenReturn(Optional.of(savedUser));
-            when(jwtService.generateAccessToken("alice@u.nus.edu"))
-                    .thenReturn("jwt-ms-token");
+            when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(savedUser));
+            when(jwtService.generateAccessToken("alice@u.nus.edu")).thenReturn("jwt-swa-token");
             when(jwtService.expiresInSeconds()).thenReturn(900L);
 
-            ResponseEntity<?> res = controller.microsoftLogin(Map.of("idToken", idToken));
+            ResponseEntity<?> res = controller.microsoftLogin(
+                    Map.<String, Object>of("clientPrincipal", cp));
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
             @SuppressWarnings("unchecked")
             Map<String, Object> body = (Map<String, Object>) res.getBody();
-            assertThat(body).containsEntry("accessToken", "jwt-ms-token");
+            assertThat(body).containsEntry("accessToken", "jwt-swa-token");
             assertThat(body).containsEntry("email", "alice@u.nus.edu");
             assertThat(body).containsEntry("expiresInSeconds", 900L);
 
@@ -438,22 +416,21 @@ class AuthControllerTest {
         }
 
         @Test
-        @DisplayName("200 + creates new user when email not found")
-        void microsoftLogin_newUser_createsAndReturnsToken() throws Exception {
-            String idToken = buildIdToken(Map.of(
-                    "preferred_username", "bob@example.com",
-                    "name", "Bob Jones",
-                    "oid", "ms-oid-456"));
+        @DisplayName("200 + creates new user when email not found via clientPrincipal")
+        void clientPrincipal_newUser_createsAndReturnsToken() {
+            Map<String, Object> cp = Map.of(
+                    "identityProvider", "aad",
+                    "userId", "swa-uid-456",
+                    "userDetails", "bob@example.com",
+                    "userRoles", java.util.List.of("authenticated"));
 
-            when(userRepository.findByEmail("bob@example.com"))
-                    .thenReturn(Optional.empty());
-            when(userRepository.save(any(User.class)))
-                    .thenAnswer(inv -> inv.getArgument(0));
-            when(jwtService.generateAccessToken("bob@example.com"))
-                    .thenReturn("jwt-new-bob");
+            when(userRepository.findByEmail("bob@example.com")).thenReturn(Optional.empty());
+            when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(jwtService.generateAccessToken("bob@example.com")).thenReturn("jwt-new-bob");
             when(jwtService.expiresInSeconds()).thenReturn(900L);
 
-            ResponseEntity<?> res = controller.microsoftLogin(Map.of("idToken", idToken));
+            ResponseEntity<?> res = controller.microsoftLogin(
+                    Map.<String, Object>of("clientPrincipal", cp));
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
 
@@ -462,22 +439,92 @@ class AuthControllerTest {
 
             User created = captor.getValue();
             assertThat(created.getEmail()).isEqualTo("bob@example.com");
-            assertThat(created.getFirstName()).isEqualTo("Bob");
-            assertThat(created.getLastName()).isEqualTo("Jones");
             assertThat(created.getPasswordHash()).isEmpty();
-            assertThat(created.getNusStudentId()).isEqualTo("MS-ms-oid-456");
+            assertThat(created.getNusStudentId()).isEqualTo("MS-swa-uid-456");
             assertThat(created.getUserType()).isEqualTo("student");
             assertThat(created.getStatus()).isEqualTo("active");
         }
 
         @Test
+        @DisplayName("400 when clientPrincipal has no userDetails")
+        void clientPrincipal_missingUserDetails_returns400() {
+            Map<String, Object> cp = Map.of("identityProvider", "aad", "userId", "swa-uid-789");
+
+            ResponseEntity<?> res = controller.microsoftLogin(
+                    Map.<String, Object>of("clientPrincipal", cp));
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = (Map<String, Object>) res.getBody();
+            assertThat(body).containsEntry("error", "No email in clientPrincipal");
+            verify(auditService).record(
+                    eq("LOGIN_REJECTED"),
+                    isNull(),
+                    isNull(),
+                    eq("USER"),
+                    isNull(),
+                    eq("FAILURE"),
+                    isNull(),
+                    isNull(),
+                    argThat(details ->
+                            "microsoft".equals(details.get("authProvider"))
+                                    && "missing_email_in_clientPrincipal".equals(details.get("reason"))));
+        }
+
+        // ── Legacy idToken flow (backward compatibility) ────────────
+
+        @Test
+        @DisplayName("200 + token for existing user via idToken preferred_username")
+        void idToken_existingUser_returnsToken() throws Exception {
+            String idToken = buildIdToken(Map.of(
+                    "preferred_username", "alice@u.nus.edu",
+                    "name", "Alice Tan",
+                    "oid", "ms-oid-123"));
+
+            when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(savedUser));
+            when(jwtService.generateAccessToken("alice@u.nus.edu")).thenReturn("jwt-ms-token");
+            when(jwtService.expiresInSeconds()).thenReturn(900L);
+
+            ResponseEntity<?> res = controller.microsoftLogin(
+                    Map.<String, Object>of("idToken", idToken));
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = (Map<String, Object>) res.getBody();
+            assertThat(body).containsEntry("accessToken", "jwt-ms-token");
+            assertThat(body).containsEntry("email", "alice@u.nus.edu");
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("200 + creates new user via idToken, sets name from claims")
+        void idToken_newUser_createsAndReturnsToken() throws Exception {
+            String idToken = buildIdToken(Map.of(
+                    "preferred_username", "bob@example.com",
+                    "name", "Bob Jones",
+                    "oid", "ms-oid-456"));
+
+            when(userRepository.findByEmail("bob@example.com")).thenReturn(Optional.empty());
+            when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(jwtService.generateAccessToken("bob@example.com")).thenReturn("jwt-new-bob");
+            when(jwtService.expiresInSeconds()).thenReturn(900L);
+
+            controller.microsoftLogin(Map.<String, Object>of("idToken", idToken));
+
+            ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(captor.capture());
+            assertThat(captor.getValue().getFirstName()).isEqualTo("Bob");
+            assertThat(captor.getValue().getLastName()).isEqualTo("Jones");
+            assertThat(captor.getValue().getNusStudentId()).isEqualTo("MS-ms-oid-456");
+        }
+
+        @Test
         @DisplayName("Falls back to email claim when preferred_username absent")
-        void microsoftLogin_fallbackToEmailClaim() throws Exception {
+        void idToken_fallbackToEmailClaim() throws Exception {
             String idToken = buildIdToken(Map.of(
                     "email", "carol@example.com",
                     "name", "Carol",
-                    "oid", "ms-oid-789"
-            ));
+                    "oid", "ms-oid-789"));
 
             User carolUser = new User();
             carolUser.setEmail("carol@example.com");
@@ -486,72 +533,23 @@ class AuthControllerTest {
             carolUser.setUserType("student");
             carolUser.setStatus("active");
 
-            when(userRepository.findByEmail("carol@example.com"))
-                    .thenReturn(Optional.of(carolUser));
-            when(jwtService.generateAccessToken("carol@example.com"))
-                    .thenReturn("jwt-carol");
+            when(userRepository.findByEmail("carol@example.com")).thenReturn(Optional.of(carolUser));
+            when(jwtService.generateAccessToken("carol@example.com")).thenReturn("jwt-carol");
             when(jwtService.expiresInSeconds()).thenReturn(900L);
 
-            ResponseEntity<?> res = controller.microsoftLogin(Map.of("idToken", idToken));
+            ResponseEntity<?> res = controller.microsoftLogin(
+                    Map.<String, Object>of("idToken", idToken));
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
-            // Key assertion: the controller resolved "carol@example.com" from the
-            // "email" claim (not "preferred_username") and used it for lookup + token
             verify(userRepository).findByEmail("carol@example.com");
-            verify(jwtService).generateAccessToken("carol@example.com");
-        }
-
-        @Test
-        @DisplayName("Single-word name sets lastName to empty")
-        void microsoftLogin_singleName_emptyLastName() throws Exception {
-            String idToken = buildIdToken(Map.of(
-                    "preferred_username", "dan@example.com",
-                    "name", "Dan",
-                    "oid", "ms-oid-999"));
-
-            when(userRepository.findByEmail("dan@example.com"))
-                    .thenReturn(Optional.empty());
-            when(userRepository.save(any(User.class)))
-                    .thenAnswer(inv -> inv.getArgument(0));
-            when(jwtService.generateAccessToken("dan@example.com")).thenReturn("jwt-dan");
-            when(jwtService.expiresInSeconds()).thenReturn(900L);
-
-            controller.microsoftLogin(Map.of("idToken", idToken));
-
-            ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-            verify(userRepository).save(captor.capture());
-            assertThat(captor.getValue().getFirstName()).isEqualTo("Dan");
-            assertThat(captor.getValue().getLastName()).isEmpty();
-        }
-
-        @Test
-        @DisplayName("Null name sets firstName and lastName to empty")
-        void microsoftLogin_nullName_emptyNames() throws Exception {
-            String idToken = buildIdToken(Map.of(
-                    "preferred_username", "noname@example.com",
-                    "oid", "ms-oid-000"));
-
-            when(userRepository.findByEmail("noname@example.com"))
-                    .thenReturn(Optional.empty());
-            when(userRepository.save(any(User.class)))
-                    .thenAnswer(inv -> inv.getArgument(0));
-            when(jwtService.generateAccessToken("noname@example.com")).thenReturn("jwt-nn");
-            when(jwtService.expiresInSeconds()).thenReturn(900L);
-
-            controller.microsoftLogin(Map.of("idToken", idToken));
-
-            ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-            verify(userRepository).save(captor.capture());
-            assertThat(captor.getValue().getFirstName()).isEmpty();
-            assertThat(captor.getValue().getLastName()).isEmpty();
         }
 
         // ── Validation / error tests ────────────────────────────────
 
         @Test
-        @DisplayName("400 when idToken key is missing")
-        void microsoftLogin_missingIdToken() {
-            ResponseEntity<?> res = controller.microsoftLogin(Map.of());
+        @DisplayName("400 when body has neither clientPrincipal nor idToken")
+        void microsoftLogin_emptyBody_returns400() {
+            ResponseEntity<?> res = controller.microsoftLogin(Map.<String, Object>of());
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             @SuppressWarnings("unchecked")
@@ -573,8 +571,9 @@ class AuthControllerTest {
 
         @Test
         @DisplayName("400 when idToken is blank")
-        void microsoftLogin_blankIdToken() {
-            ResponseEntity<?> res = controller.microsoftLogin(Map.of("idToken", "   "));
+        void idToken_blank_returns400() {
+            ResponseEntity<?> res = controller.microsoftLogin(
+                    Map.<String, Object>of("idToken", "   "));
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             @SuppressWarnings("unchecked")
@@ -583,11 +582,12 @@ class AuthControllerTest {
         }
 
         @Test
-        @DisplayName("400 when token has no email claims")
-        void microsoftLogin_noEmailInToken() throws Exception {
+        @DisplayName("400 when idToken has no email claims")
+        void idToken_noEmailClaims_returns400() throws Exception {
             String idToken = buildIdToken(Map.of("oid", "ms-oid-no-email"));
 
-            ResponseEntity<?> res = controller.microsoftLogin(Map.of("idToken", idToken));
+            ResponseEntity<?> res = controller.microsoftLogin(
+                    Map.<String, Object>of("idToken", idToken));
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             @SuppressWarnings("unchecked")
@@ -596,10 +596,10 @@ class AuthControllerTest {
         }
 
         @Test
-        @DisplayName("400 when token is malformed")
-        void microsoftLogin_malformedToken() {
+        @DisplayName("400 when idToken is malformed")
+        void idToken_malformed_returns400() {
             ResponseEntity<?> res = controller.microsoftLogin(
-                    Map.of("idToken", "not.a.valid.jwt"));
+                    Map.<String, Object>of("idToken", "not.a.valid.jwt"));
 
             assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             @SuppressWarnings("unchecked")
@@ -617,6 +617,23 @@ class AuthControllerTest {
                     argThat(details ->
                             "microsoft".equals(details.get("authProvider"))
                                     && details.get("reason") != null));
+        }
+
+        // ── Helper ──────────────────────────────────────────────────
+
+        private static final byte[] TEST_SECRET =
+                "super-secret-key-that-is-at-least-32-bytes!!".getBytes();
+
+        private String buildIdToken(Map<String, Object> claims) throws Exception {
+            JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder()
+                    .issuer("https://login.microsoftonline.com/test-tenant/v2.0")
+                    .audience("test-client-id")
+                    .expirationTime(new Date(System.currentTimeMillis() + 300_000));
+            claims.forEach(builder::claim);
+            SignedJWT signedJWT = new SignedJWT(
+                    new JWSHeader(JWSAlgorithm.HS256), builder.build());
+            signedJWT.sign(new MACSigner(TEST_SECRET));
+            return signedJWT.serialize();
         }
     }
 
