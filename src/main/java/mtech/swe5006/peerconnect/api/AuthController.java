@@ -14,8 +14,20 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.jwk.source.RemoteJWKSet;
+import com.nimbusds.jose.proc.JWSVerificationKeySelector;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
+import com.nimbusds.jwt.proc.DefaultJWTProcessor;
+import jakarta.annotation.PostConstruct;
+import java.net.URL;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,6 +51,20 @@ public class AuthController {
 
   @Value("${app.email.cooldown.seconds:120}")
   private long EMAIL_COOLDOWN_SECONDS;
+
+  @Value("${azure.ad.tenant-id}")
+  private String tenantId;
+
+  @Value("${azure.ad.client-id}")
+  private String clientId;
+
+  private JWKSource<SecurityContext> jwkSource;
+
+  @PostConstruct
+  void initJwkSource() throws Exception {
+    this.jwkSource = new RemoteJWKSet<>(
+        new URL("https://login.microsoftonline.com/" + tenantId + "/discovery/v2.0/keys"));
+  }
 
   public AuthController(UserRepository userRepository,
       PasswordEncoder passwordEncoder,
@@ -161,48 +187,67 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, Object> body) {
         }
     }
 
-    // Legacy flow: raw idToken JWT
-    String idToken = firstNonBlank(
+    // Legacy flow: raw access token JWT (sent under "token", "idToken", or "credential")
+    String rawToken = firstNonBlank(
         body != null ? (String) body.get("idToken") : null,
         body != null ? (String) body.get("credential") : null,
         body != null ? (String) body.get("token") : null);
-    if (idToken == null || idToken.isBlank()) {
+    if (rawToken == null || rawToken.isBlank()) {
         recordAuthEvent("LOGIN_REJECTED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", "missing_id_token"));
         return ResponseEntity.badRequest().body(Map.of("error", "idToken required"));
     }
 
     try {
-        com.nimbusds.jwt.SignedJWT jwt = com.nimbusds.jwt.SignedJWT.parse(idToken);
-        var claims = jwt.getJWTClaimsSet();
+        JWTClaimsSet claims = validateMicrosoftToken(rawToken);
+
+        // oid is the stable immutable identifier; prefer it over sub
+        String oid = firstNonBlank(claims.getStringClaim("oid"), claims.getStringClaim("sub"));
 
         String email = firstNonBlank(
             claims.getStringClaim("preferred_username"),
             claims.getStringClaim("email"),
             claims.getStringClaim("upn"));
-        String name = claims.getStringClaim("name");
-        String oid  = claims.getStringClaim("oid");
 
         if (email == null) {
             recordAuthEvent("LOGIN_REJECTED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", "missing_email_claim"));
             return ResponseEntity.badRequest().body(Map.of("error", "No email in token"));
         }
 
-        final String resolvedEmail = email.trim().toLowerCase();
-        final String resolvedOid = oid;
-        final String resolvedName = name;
+        // Prefer given_name/family_name over splitting name (unreliable for multi-word names)
+        String givenName  = claims.getStringClaim("given_name");
+        String familyName = claims.getStringClaim("family_name");
+        String name       = claims.getStringClaim("name");
 
-        User user = userRepository.findByEmail(resolvedEmail).orElseGet(() -> {
+        final String resolvedEmail  = email.trim().toLowerCase();
+        final String resolvedOid    = oid;
+        final String resolvedFirst  = givenName  != null ? givenName
+            : (name != null ? name.split(" ")[0] : "");
+        final String resolvedLast   = familyName != null ? familyName
+            : (name != null && name.contains(" ") ? name.split(" ", 2)[1] : "");
+
+        // OID-first lookup → email fallback with oid backfill → create new
+        User user = null;
+        if (resolvedOid != null) {
+            user = userRepository.findByMicrosoftOid(resolvedOid).orElse(null);
+        }
+        if (user == null) {
+            user = userRepository.findByEmail(resolvedEmail).orElse(null);
+            if (user != null && resolvedOid != null) {
+                user.setMicrosoftOid(resolvedOid);
+                userRepository.save(user);
+            }
+        }
+        if (user == null) {
             User u = new User();
             u.setEmail(resolvedEmail);
             u.setPasswordHash("");
-            if (resolvedOid != null) u.setNusStudentId("MS-" + resolvedOid);
-            u.setFirstName(resolvedName != null ? resolvedName.split(" ")[0] : "");
-            u.setLastName(resolvedName != null && resolvedName.contains(" ")
-                ? resolvedName.split(" ", 2)[1] : "");
+            u.setMicrosoftOid(resolvedOid);
+            u.setFirstName(resolvedFirst);
+            u.setLastName(resolvedLast);
             u.setUserType("student");
             u.setStatus("active");
-            return userRepository.save(u);
-        });
+            user = userRepository.save(u);
+        }
 
         String token = jwtService.generateAccessToken(user.getEmail());
         recordAuthEvent("LOGIN_SUCCEEDED", user, user.getEmail(), "SUCCESS", Map.of("authProvider", "microsoft"));
@@ -210,10 +255,36 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, Object> body) {
 
     } catch (Exception e) {
         recordAuthEvent("LOGIN_FAILED", null, null, "FAILURE", Map.of("authProvider", "microsoft", "reason", e.getClass().getSimpleName()));
-        log.error("[MicrosoftLogin] IdToken flow failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+        log.error("[MicrosoftLogin] Token flow failed: {} - {}", e.getClass().getSimpleName(), e.getMessage());
         return ResponseEntity.status(400).body(Map.of("error", "Microsoft login failed. Please try again."));
     }
 }
+
+  private JWTClaimsSet validateMicrosoftToken(String rawToken) throws Exception {
+    ConfigurableJWTProcessor<SecurityContext> processor = new DefaultJWTProcessor<>();
+    processor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
+    // Disable built-in verifier; we validate issuer, audience, and expiry manually below
+    processor.setJWTClaimsSetVerifier((claimsSet, ctx) -> {});
+
+    JWTClaimsSet claims = processor.process(rawToken, null);
+
+    String expectedIssuer = "https://login.microsoftonline.com/" + tenantId + "/v2.0";
+    if (!expectedIssuer.equals(claims.getIssuer())) {
+      throw new SecurityException("Invalid issuer: " + claims.getIssuer());
+    }
+
+    List<String> aud = claims.getAudience();
+    if (aud == null || (!aud.contains("api://" + clientId) && !aud.contains(clientId))) {
+      throw new SecurityException("Invalid audience: " + aud);
+    }
+
+    Date exp = claims.getExpirationTime();
+    if (exp == null || exp.before(new Date())) {
+      throw new SecurityException("Token expired");
+    }
+
+    return claims;
+  }
   // Simple DTOs (records) to compile immediately
   public record RegisterRequest(
       String nusStudentId,

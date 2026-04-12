@@ -12,6 +12,8 @@ import mtech.swe5006.peerconnect.data.sql.User;
 public interface UserRepository extends JpaRepository<User, UUID> {
   Optional<User> findByEmail(String email);
 
+  Optional<User> findByMicrosoftOid(String microsoftOid);
+
   Optional<User> findByNusStudentId(String nusStudentId);
 
   boolean existsByEmail(String email);

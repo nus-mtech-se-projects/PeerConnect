@@ -6,12 +6,15 @@ import java.util.UUID;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-//import mtech.swe5006.peerconnect.data.sql.UserRepository;
+
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+    @Index(name = "idx_users_microsoft_oid", columnList = "microsoft_oid")
+})
 public class User {
 
     @Id
@@ -41,6 +44,9 @@ public class User {
 
     @Column(name = "status", nullable = false, length = 30)
     private String status;
+
+    @Column(name = "microsoft_oid", length = 36)
+    private String microsoftOid;
 
     @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "datetime2")
     private LocalDateTime createdAt;
@@ -102,4 +108,7 @@ public class User {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getMicrosoftOid() { return microsoftOid; }
+    public void setMicrosoftOid(String microsoftOid) { this.microsoftOid = microsoftOid; }
 }
