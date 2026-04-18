@@ -10,6 +10,9 @@ env:
   JAVA_VERSION: "21"
   AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+  SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+  SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
 
 permissions:
   contents: read
@@ -31,7 +34,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build application
-        run: ./gradlew clean build -x test
+        run: ./gradlew clean build
 
       - name: Resolve artifact path
         id: artifact
@@ -52,6 +55,67 @@ jobs:
           name: app-zip-${{ github.sha }}
           path: app.zip
           retention-days: 1
+
+      - name: Upload JaCoCo report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report-${{ github.sha }}
+          path: build/reports/jacoco/test/jacocoTestReport.xml
+          retention-days: 1
+
+  sonarcloud:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate SonarCloud configuration
+        if: ${{ secrets.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+        run: |
+          if [ -z "${{ env.SONAR_ORGANIZATION }}" ]; then
+            echo "Missing repository variable: SONAR_ORGANIZATION"
+            exit 1
+          fi
+          if [ -z "${{ env.SONAR_PROJECT_KEY }}" ]; then
+            echo "Missing repository variable: SONAR_PROJECT_KEY"
+            exit 1
+          fi
+
+      - name: Download JaCoCo report
+        if: ${{ secrets.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: jacoco-report-${{ github.sha }}
+          path: build/reports/jacoco/test
+
+      - name: Set up Java
+        if: ${{ secrets.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        if: ${{ secrets.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run SonarCloud analysis
+        if: ${{ secrets.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ./gradlew classes testClasses sonar \
+            -x test \
+            -x jacocoTestReport \
+            -Dsonar.host.url="${SONAR_HOST_URL}" \
+            -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.organization="${SONAR_ORGANIZATION}" \
+            -Dsonar.projectKey="${SONAR_PROJECT_KEY}"
+
+      - name: Skip SonarCloud analysis when configuration is missing
+        if: ${{ secrets.SONAR_TOKEN == '' || env.SONAR_HOST_URL == '' }}
+        run: echo "SONAR_TOKEN or SONAR_HOST_URL is not configured; skipping SonarCloud analysis."
 
   dependency-scan:
     needs: build
@@ -84,40 +148,11 @@ jobs:
         if: ${{ env.SNYK_TOKEN == '' }}
         run: echo "SNYK_TOKEN is not configured; skipping Snyk scan."
 
-  docker-build:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image (no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          load: false
-          tags: ghcr.io/${{ github.repository_owner }}/peerconnect:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          outputs: type=docker,dest=/tmp/peerconnect-image.tar
-
-      - name: Upload Docker image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: peerconnect-image-${{ github.sha }}
-          path: /tmp/peerconnect-image.tar
-          retention-days: 1
-
   deploy-azure:
     needs:
       - build
+      - sonarcloud
       - dependency-scan
-      - docker-build
     runs-on: ubuntu-latest
 
     steps:
@@ -130,6 +165,10 @@ jobs:
         run: |
           if [ -z "${{ env.AZURE_WEBAPP_NAME }}" ]; then
             echo "Missing repository variable: AZURE_WEBAPP_NAME"
+            exit 1
+          fi
+          if [ -z "${{ vars.AZURE_WEBAPP_URL }}" ]; then
+            echo "Missing repository variable: AZURE_WEBAPP_URL"
             exit 1
           fi
           if [ -z "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
@@ -151,6 +190,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate UAT configuration
+        run: |
+          if [ -z "${{ vars.AZURE_WEBAPP_URL }}" ]; then
+            echo "Missing repository variable: AZURE_WEBAPP_URL"
+            exit 1
+          fi
+          if [ -z "${{ vars.AZURE_SQL_SERVER }}" ]; then
+            echo "Missing repository variable: AZURE_SQL_SERVER"
+            exit 1
+          fi
+          if [ -z "${{ vars.AZURE_SQL_DATABASE }}" ]; then
+            echo "Missing repository variable: AZURE_SQL_DATABASE"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AZURE_SQL_USERNAME }}" ]; then
+            echo "Missing secret: AZURE_SQL_USERNAME"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AZURE_SQL_PASSWORD }}" ]; then
+            echo "Missing secret: AZURE_SQL_PASSWORD"
+            exit 1
+          fi
+
       - name: Make scripts executable
         run: chmod +x .github/scripts/*.sh
 
@@ -167,7 +229,7 @@ jobs:
           APP_URL: ${{ vars.AZURE_WEBAPP_URL }}
         run: .github/scripts/wait-for-app.sh
 
-      - name: Run Postman collection
+      - name: Run PosSIlitman collection
         env:
           BASE_URL: ${{ vars.AZURE_WEBAPP_URL }}
           REPORT_TITLE: PeerConnect UAT Report
