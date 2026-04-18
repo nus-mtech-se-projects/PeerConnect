@@ -53,6 +53,40 @@ For this repository, `SONAR_ORGANIZATION` should be:
 nus-mtech-se-projects
 ```
 
+### How to get the SonarCloud values
+
+`SONAR_TOKEN`
+- Log in to SonarCloud.
+- Click your profile icon.
+- Go to `My Account` -> `Security`.
+- Generate a token and copy it immediately.
+- Use that value for `SONAR_TOKEN`.
+- The token must have permission to execute analysis for the project.
+
+`SONAR_ORGANIZATION`
+- Open the SonarCloud organization used by this repository.
+- For this project, the organization key is:
+```
+nus-mtech-se-projects
+```
+
+`SONAR_PROJECT_KEY`
+- Open the PeerConnect project in SonarCloud.
+- Go to the project settings or project information page.
+- Copy the exact project key shown there.
+- For this repository, the project key is:
+```
+nus-mtech-se-projects_PeerConnect
+```
+
+For GitHub Actions, add these repository settings:
+- Secret: `SONAR_TOKEN`
+- Variable: `SONAR_HOST_URL=https://sonarcloud.io`
+- Variable: `SONAR_ORGANIZATION=nus-mtech-se-projects`
+- Variable: `SONAR_PROJECT_KEY=nus-mtech-se-projects_PeerConnect`
+
+If SonarCloud manual analysis fails with a message about Automatic Analysis being enabled, disable `Automatic Analysis` in the SonarCloud project settings and keep the Gradle-based analysis from CI.
+
 ## GitHub workflow
 
 Pushing to GitHub is different from local testing because it validates the actual GitHub Actions pipeline, not just the Gradle commands on your machine.
