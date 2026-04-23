@@ -237,7 +237,7 @@ jobs:
         run: .github/scripts/cleanup-uat-test-data.sh
 
   performance-smoke:
-    needs: postman-uat
+    needs: deploy-azure
     runs-on: ubuntu-latest
     env:
       K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
