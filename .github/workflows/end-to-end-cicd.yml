@@ -196,22 +196,6 @@ jobs:
             echo "Missing repository variable: AZURE_WEBAPP_URL"
             exit 1
           fi
-          if [ -z "${{ vars.AZURE_SQL_SERVER }}" ]; then
-            echo "Missing repository variable: AZURE_SQL_SERVER"
-            exit 1
-          fi
-          if [ -z "${{ vars.AZURE_SQL_DATABASE }}" ]; then
-            echo "Missing repository variable: AZURE_SQL_DATABASE"
-            exit 1
-          fi
-          if [ -z "${{ secrets.AZURE_SQL_USERNAME }}" ]; then
-            echo "Missing secret: AZURE_SQL_USERNAME"
-            exit 1
-          fi
-          if [ -z "${{ secrets.AZURE_SQL_PASSWORD }}" ]; then
-            echo "Missing secret: AZURE_SQL_PASSWORD"
-            exit 1
-          fi
 
       - name: Make scripts executable
         run: chmod +x .github/scripts/*.sh
@@ -229,7 +213,7 @@ jobs:
           APP_URL: ${{ vars.AZURE_WEBAPP_URL }}
         run: .github/scripts/wait-for-app.sh
 
-      - name: Run PosSIlitman collection
+      - name: Run Postman collection
         env:
           BASE_URL: ${{ vars.AZURE_WEBAPP_URL }}
           REPORT_TITLE: PeerConnect UAT Report
@@ -251,3 +235,43 @@ jobs:
           AZURE_SQL_USERNAME: ${{ secrets.AZURE_SQL_USERNAME }}
           AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
         run: .github/scripts/cleanup-uat-test-data.sh
+
+  performance-smoke:
+    needs: postman-uat
+    runs-on: ubuntu-latest
+    env:
+      K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+      K6_CLOUD_PROJECT_ID: ${{ vars.K6_CLOUD_PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate performance test configuration
+        run: |
+          if [ -z "${{ vars.AZURE_WEBAPP_URL }}" ]; then
+            echo "Missing repository variable: AZURE_WEBAPP_URL"
+            exit 1
+          fi
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 performance smoke test in Grafana Cloud
+        if: ${{ env.K6_CLOUD_TOKEN != '' && env.K6_CLOUD_PROJECT_ID != '' }}
+        uses: grafana/run-k6-action@v1
+        env:
+          BASE_URL: ${{ vars.AZURE_WEBAPP_URL }}
+          K6_CLOUD_TOKEN: ${{ env.K6_CLOUD_TOKEN }}
+          K6_CLOUD_PROJECT_ID: ${{ env.K6_CLOUD_PROJECT_ID }}
+        with:
+          path: performance/smoke.js
+          cloud-run-locally: true
+          cloud-comment-on-pr: false
+
+      - name: Run k6 performance smoke test locally
+        if: ${{ env.K6_CLOUD_TOKEN == '' || env.K6_CLOUD_PROJECT_ID == '' }}
+        uses: grafana/run-k6-action@v1
+        env:
+          BASE_URL: ${{ vars.AZURE_WEBAPP_URL }}
+        with:
+          path: performance/smoke.js

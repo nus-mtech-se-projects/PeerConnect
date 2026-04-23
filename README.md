@@ -98,8 +98,28 @@ The main CI/CD workflow runs on pushes to `main` and on manual dispatch. It:
 - runs the Snyk dependency scan if configured
 - deploys the application to Azure Web App
 - runs Postman UAT against the deployed application
+- runs a lightweight k6 performance smoke test after Postman UAT
 
 Local testing is the fast way to catch build and test problems early. Pushing to GitHub verifies the full automation path, including repository secrets and variables, artifact passing between jobs, SonarCloud, Azure deployment, and post-deploy checks.
+
+To stream k6 performance results to Grafana Cloud k6, configure:
+- Secret: `K6_CLOUD_TOKEN`
+- Variable: `K6_CLOUD_PROJECT_ID`
+
+The Grafana Cloud k6 app for this project is:
+```
+https://peerconnect.grafana.net/a/k6-app
+```
+
+This URL is the Grafana Cloud k6 UI for viewing test results. Do not put this URL directly in the GitHub Actions workflow. The workflow uses `K6_CLOUD_TOKEN` and `K6_CLOUD_PROJECT_ID` to publish results, then the run logs will show the specific Grafana Cloud result URL.
+
+Add the k6 values in GitHub:
+- Go to the repository `Settings`
+- Open `Secrets and variables` -> `Actions`
+- Add `K6_CLOUD_TOKEN` under `Secrets`
+- Add `K6_CLOUD_PROJECT_ID` under `Variables`
+
+If these k6 settings are missing, the workflow still runs the performance smoke test locally in GitHub Actions and prints the results in the job logs.
 
 ## GitHub Packages (Gradle)
 
