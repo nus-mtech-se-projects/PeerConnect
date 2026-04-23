@@ -30,7 +30,7 @@
 PeerConnect is a RESTful backend service that enables NUS students to:
 
 - Register and authenticate using email/password (JWT-based)
-- Create and manage **study groups** with session scheduling
+- Create and manage **study groups** with session scheduling and announcements
 - Join study groups via invitation or direct request, with optional owner approval
 - Offer and enroll in **peer tutoring classes**
 - Give and receive **peer feedback**
@@ -263,6 +263,12 @@ Interactive Swagger UI is available at `/swagger-ui.html` when the server is run
 | `POST` | `/api/groups/{id}/sessions` | Create a study session |
 | `PUT` | `/api/groups/{id}/sessions/{sessionId}` | Update a study session |
 | `DELETE` | `/api/groups/{id}/sessions/{sessionId}` | Delete a study session |
+| `GET` | `/api/groups/{id}/announcements` | List announcements for a group |
+| `POST` | `/api/groups/{id}/announcements` | Create an announcement (owner/admin) |
+| `PUT` | `/api/groups/{id}/announcements/{announcementId}` | Update an announcement (creator/owner/admin) |
+| `DELETE` | `/api/groups/{id}/announcements/{announcementId}` | Delete an announcement (creator/owner/admin) |
+| `POST` | `/api/groups/{id}/announcements/{announcementId}/archive` | Archive an announcement (members) |
+| `GET` | `/api/groups/joined/announcements` | List announcements from all joined groups |
 
 ### Tutoring — `/api/tutoring`
 

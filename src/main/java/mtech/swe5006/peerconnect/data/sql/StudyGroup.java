@@ -58,6 +58,14 @@ public class StudyGroup {
     @Transient
     private Boolean approvalRequired;
 
+    /**
+     * When true, edits to the group details that change tracked fields (venue, schedule,
+     * module code, etc.) automatically post a system-authored announcement summarising
+     * the change. Opt-in per group so it doesn't surprise existing owners.
+     */
+    @Column(name = "auto_announce_enabled", nullable = false)
+    private boolean autoAnnounceEnabled;
+
     @Column(name = "created_at", columnDefinition = "DATETIME2")
     private LocalDateTime createdAt;
 
@@ -109,6 +117,9 @@ public class StudyGroup {
 
     public Boolean getApprovalRequired() { return approvalRequired; }
     public void setApprovalRequired(Boolean approvalRequired) { this.approvalRequired = approvalRequired; }
+
+    public boolean isAutoAnnounceEnabled() { return autoAnnounceEnabled; }
+    public void setAutoAnnounceEnabled(boolean autoAnnounceEnabled) { this.autoAnnounceEnabled = autoAnnounceEnabled; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

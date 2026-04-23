@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.transaction.annotation.Transactional;
 
 import static mtech.swe5006.peerconnect.api.ControllerUtils.asBoolean;
 import static mtech.swe5006.peerconnect.api.ControllerUtils.asShort;
@@ -47,6 +48,8 @@ import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import mtech.swe5006.peerconnect.service.AuditService;
+import mtech.swe5006.peerconnect.service.AnnouncementService;
+import mtech.swe5006.peerconnect.service.StudyGroupAutoAnnouncer;
 import mtech.swe5006.peerconnect.service.EmailService;
 import mtech.swe5006.peerconnect.service.chat.GroupChatFacade;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -102,6 +105,18 @@ public class GroupController {
     private final EmailService emailService;
     private final RestrictedUserRepository restrictedUserRepository;
     private final GroupChatFacade groupChatFacade;
+    private final AnnouncementService announcementService;
+
+    /**
+     * Field-injected (rather than constructor-injected) because the primary constructor
+     * already has 10+ parameters — adding another would be a readability hazard.
+     * Spring resolves this after construction; tests can set it directly via reflection
+     * (see {@code ReflectionTestUtils}) or leave it null (the auto-announce path is
+     * an opt-in feature guarded by {@code autoAnnounceEnabled} so a null reference
+     * cannot be reached through normal calls).
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private StudyGroupAutoAnnouncer autoAnnouncer;
 
     public GroupController(StudyGroupRepository groupRepository,
                            StudyGroupMemberRepository groupMemberRepository,
@@ -110,9 +125,10 @@ public class GroupController {
                            JdbcTemplate jdbcTemplate,
                            AuditService auditService,
                            EmailService emailService,
-                           RestrictedUserRepository restrictedUserRepository) {
+                           RestrictedUserRepository restrictedUserRepository,
+                           AnnouncementService announcementService) {
         this(groupRepository, groupMemberRepository, studySessionRepository, userRepository, jdbcTemplate,
-            auditService, emailService, restrictedUserRepository, null);
+            auditService, emailService, restrictedUserRepository, null, announcementService);
     }
 
     @Autowired
@@ -124,7 +140,8 @@ public class GroupController {
                            AuditService auditService,
                            EmailService emailService,
                            RestrictedUserRepository restrictedUserRepository,
-                           GroupChatFacade groupChatFacade) {
+                           GroupChatFacade groupChatFacade,
+                           AnnouncementService announcementService) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.studySessionRepository = studySessionRepository;
@@ -134,6 +151,7 @@ public class GroupController {
         this.emailService = emailService;
         this.restrictedUserRepository = restrictedUserRepository;
         this.groupChatFacade = groupChatFacade;
+        this.announcementService = announcementService;
     }
 
     @GetMapping
@@ -212,6 +230,7 @@ public class GroupController {
         LocalDateTime preferredSchedule = parseDateTime(preferredScheduleStr);
         Short maxMembers = asShort(body.get(FIELD_MAX_MEMBERS), (short) 10);
         boolean approvalRequired = asBoolean(body.get(FIELD_APPROVAL_REQUIRED), false);
+        boolean autoAnnounceEnabled = asBoolean(body.get("autoAnnounceEnabled"), true);
 
         if (preferredScheduleStr != null && !preferredScheduleStr.isBlank() && preferredSchedule == null) {
             return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Invalid preferred schedule format. Use ISO format: yyyy-MM-ddTHH:mm:ss"));
@@ -232,6 +251,7 @@ public class GroupController {
         group.setMeetingLink(meetingLink);
         group.setPreferredSchedule(preferredSchedule);
         group.setApprovalRequired(approvalRequired);
+        group.setAutoAnnounceEnabled(autoAnnounceEnabled);
         group.setCreatedBy(user.getId());
         group.setStatus(STATUS_ACTIVE);
         group.setMaxMembers(maxMembers);
@@ -294,6 +314,10 @@ public class GroupController {
         if (group == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, GROUP_NOT_FOUND));
         if (!isAdmin(group, user.getId())) return ResponseEntity.status(403).body(Map.of(ERR_KEY, "Not authorized to edit this group"));
 
+        // Snapshot tracked fields BEFORE we mutate the entity so the auto-announcer
+        // can diff old vs new even though the save happens on the same managed row.
+        StudyGroupAutoAnnouncer.GroupSnapshot beforeSnapshot = StudyGroupAutoAnnouncer.GroupSnapshot.from(group);
+
         String name = firstNonBlank(asString(body.get("name")), group.getName());
         String moduleCode = firstNonBlank(asString(body.get(FIELD_MODULE_CODE)), asString(body.get("courseCode")), group.getModuleCode());
         String description = firstNonBlank(asString(body.get(FIELD_DESCRIPTION)), group.getDescription());
@@ -312,6 +336,9 @@ public class GroupController {
         boolean approvalRequired = body.containsKey(FIELD_APPROVAL_REQUIRED)
             ? asBoolean(body.get(FIELD_APPROVAL_REQUIRED), false)
             : Boolean.TRUE.equals(group.getApprovalRequired());
+        boolean autoAnnounceEnabled = body.containsKey("autoAnnounceEnabled")
+            ? asBoolean(body.get("autoAnnounceEnabled"), false)
+            : group.isAutoAnnounceEnabled();
 
         String validationError = validateGroupInput(name, moduleCode, description, studyMode, location, meetingLink, preferredSchedule, maxMembers);
         if (validationError != null) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, validationError));
@@ -331,8 +358,15 @@ public class GroupController {
         group.setPreferredSchedule(body.containsKey(FIELD_PREFERRED_SCHEDULE) ? preferredSchedule : group.getPreferredSchedule());
         group.setMaxMembers(maxMembers);
         group.setApprovalRequired(approvalRequired);
+        group.setAutoAnnounceEnabled(autoAnnounceEnabled);
         refreshGroupStatus(group);
         groupRepository.save(group);
+
+        // Auto-post a system announcement summarising the tracked-field diff, if the
+        // owner has opted in and at least one tracked field actually changed.
+        if (autoAnnouncer != null) {
+            autoAnnouncer.maybePostUpdateAnnouncement(beforeSnapshot, group, user.getId());
+        }
 
         // Send group-updated email notification to approved members with role "member"
         try {
@@ -663,6 +697,7 @@ public class GroupController {
     }
 
     @PostMapping("/{id}/transfer-ownership")
+    @Transactional
     public ResponseEntity<?> transferOwnership(@PathVariable UUID id, Authentication auth, @RequestBody Map<String, Object> body) {
         User actor = getCurrentUser(auth);
         if (actor == null) return ResponseEntity.status(404).body(Map.of(ERR_KEY, USER_NOT_FOUND));
@@ -679,16 +714,26 @@ public class GroupController {
             return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "New owner must be an approved member"));
         }
 
+        // Demote the previous owner's membership row (if one exists) to admin so
+        // they keep management rights — matches the authorisation matrix used
+        // by isAdmin() which accepts role=owner OR role=admin.
         if (currentOwnerMember != null) {
             currentOwnerMember.setRole(ROLE_ADMIN);
             groupMemberRepository.save(currentOwnerMember);
         }
+        // Promote the new owner. Their membership must already be approved, but
+        // set it again defensively in case the row drifted.
         newOwnerMember.setRole(ROLE_OWNER);
         newOwnerMember.setMembershipStatus(STATUS_APPROVED);
         groupMemberRepository.save(newOwnerMember);
 
+        // CRITICAL: update group.createdBy so isOwner()/isAdmin() return true
+        // for the new owner on the VERY NEXT request. saveAndFlush forces the
+        // UPDATE to hit the DB before this transaction commits, avoiding any
+        // window where the new owner loads /api/groups/{id} before the write
+        // has been synced and wrongly sees isAdmin=false.
         group.setCreatedBy(newOwnerId);
-        groupRepository.save(group);
+        groupRepository.saveAndFlush(group);
         auditService.record(
             "GROUP_OWNERSHIP_TRANSFERRED",
             actor.getId(),
@@ -792,6 +837,7 @@ public class GroupController {
         String meetingLink = asString(body.get(FIELD_MEETING_LINK));
         LocalDateTime startsAt = parseDateTime(asString(body.get(FIELD_STARTS_AT)));
         LocalDateTime endsAt = parseDateTime(asString(body.get(FIELD_ENDS_AT)));
+        boolean autoAnnounceEnabled = asBoolean(body.get("autoAnnounceEnabled"), true);
 
         if (title == null || title.isBlank()) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "Session title is required"));
         if (startsAt == null) return ResponseEntity.badRequest().body(Map.of(ERR_KEY, "startsAt is required in ISO datetime format"));
@@ -836,6 +882,11 @@ public class GroupController {
             dispatchSessionEmail(group, session, emailService::sendSessionCreated);
         } catch (Exception emailEx) {
             log.warn("[CreateSession] Failed to send session-created emails for group {}: {}", id, emailEx.getMessage());
+        }
+
+        // Optionally post an auto-announcement summarising the new session.
+        if (autoAnnouncer != null) {
+            autoAnnouncer.maybePostSessionCreated(group, session, actor.getId(), autoAnnounceEnabled);
         }
 
         return ResponseEntity.ok(buildSessionResponse(session));
@@ -1173,6 +1224,7 @@ public class GroupController {
         row.put(FIELD_MAX_MEMBERS, group.getMaxMembers());
         row.put("status", group.getStatus());
         row.put(FIELD_APPROVAL_REQUIRED, Boolean.TRUE.equals(group.getApprovalRequired()));
+        row.put("autoAnnounceEnabled", group.isAutoAnnounceEnabled());
         row.put("createdAt", group.getCreatedAt());
         row.put(KEY_MEMBER_COUNT, approvedCount);
         row.put("pendingCount", pendingCount);
@@ -1186,6 +1238,7 @@ public class GroupController {
         Map<String, Object> details = new LinkedHashMap<>(buildGroupSummary(group, currentUser));
         details.put("members", getMembersPayload(group.getId()));
         details.put("sessions", getSessionsPayload(group.getId()));
+        details.put("announcements", getAnnouncementsPayload(group.getId(), currentUser.getId()));
         return details;
     }
 
@@ -1218,6 +1271,27 @@ public class GroupController {
         return studySessionRepository.findByGroupIdOrderByStartsAtAsc(groupId).stream()
             .map(this::buildSessionResponse)
             .toList();
+    }
+
+    private List<Map<String, Object>> getAnnouncementsPayload(UUID groupId, UUID userId) {
+        return announcementService.getGroupAnnouncements(groupId, userId).stream()
+            .map(this::buildAnnouncementResponse)
+            .toList();
+    }
+
+    private Map<String, Object> buildAnnouncementResponse(mtech.swe5006.peerconnect.dto.AnnouncementResponse announcement) {
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("id", announcement.id().toString());
+        resp.put(KEY_GROUP_ID, announcement.groupId().toString());
+        resp.put(FIELD_TITLE, announcement.title());
+        resp.put("content", announcement.content());
+        resp.put(KEY_CREATED_BY, announcement.createdBy().toString());
+        resp.put("createdAt", announcement.createdAt().toString());
+        resp.put("authorEmail", announcement.authorEmail());
+        resp.put("authorName", announcement.authorName());
+        resp.put("groupName", announcement.groupName());
+        resp.put(FIELD_MODULE_CODE, announcement.moduleCode());
+        return resp;
     }
 
     private List<Map<String, Object>> getMembersPayload(UUID groupId) {

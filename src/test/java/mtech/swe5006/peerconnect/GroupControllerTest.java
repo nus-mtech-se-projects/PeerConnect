@@ -12,6 +12,7 @@ import mtech.swe5006.peerconnect.data.sql.StudySessionRepository;
 import mtech.swe5006.peerconnect.data.sql.User;
 import mtech.swe5006.peerconnect.data.sql.UserRepository;
 import mtech.swe5006.peerconnect.service.AuditService;
+import mtech.swe5006.peerconnect.service.AnnouncementService;
 import mtech.swe5006.peerconnect.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +57,8 @@ class GroupControllerTest {
     EmailService emailService;
     @Mock
     RestrictedUserRepository restrictedUserRepository;
+    @Mock
+    AnnouncementService announcementService;
 
     @InjectMocks
     GroupController controller;
@@ -794,6 +797,20 @@ class GroupControllerTest {
             lenient().when(memberRepository.findByGroupIdAndUserId(groupId, charlie.getId()))
                 .thenReturn(Optional.of(charlieMembership));
             lenient().when(groupRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            // Transfer uses saveAndFlush to force an immediate write — mock it
+            // the same way so the controller doesn't NPE when we test against
+            // Mockito's default returnValue (null).
+            lenient().when(groupRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+            // Mocks needed by tests that call getGroup() after a transfer to
+            // verify the admin flag.
+            lenient().when(memberRepository.findByGroupId(groupId))
+                .thenReturn(List.of(aliceMembership, charlieMembership));
+            lenient().when(studySessionRepository.findByGroupIdOrderByStartsAtAsc(groupId))
+                .thenReturn(Collections.emptyList());
+            lenient().when(announcementService.getGroupAnnouncements(eq(groupId), any()))
+                .thenReturn(Collections.emptyList());
+            lenient().when(userRepository.findById(alice.getId())).thenReturn(Optional.of(alice));
+            lenient().when(userRepository.findById(charlie.getId())).thenReturn(Optional.of(charlie));
         }
 
         @Test
@@ -802,8 +819,13 @@ class GroupControllerTest {
                 Map.of("newOwnerUserId", charlie.getId().toString()));
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat(((Map<?, ?>) res.getBody()).get("transferred")).isEqualTo(true);
+            // Both membership rows and the group's createdBy pointer must flip
+            // so isAdmin() returns true for the new owner AND the demoted old
+            // owner (who stays as an admin).
             assertThat(charlieMembership.getRole()).isEqualTo("owner");
+            assertThat(charlieMembership.getMembershipStatus()).isEqualTo("approved");
             assertThat(aliceMembership.getRole()).isEqualTo("admin");
+            assertThat(group.getCreatedBy()).isEqualTo(charlie.getId());
             verify(auditService).record(
                 eq("GROUP_OWNERSHIP_TRANSFERRED"),
                 eq(alice.getId()),
@@ -815,6 +837,43 @@ class GroupControllerTest {
                 isNull(),
                 argThat(details -> charlie.getId().toString().equals(details.get("newOwnerUserId")))
             );
+        }
+
+        @Test
+        void newOwnerGainsAdminRightsAfterTransfer() {
+            // Verifies the regression the user reported: after a transfer the
+            // new owner must immediately satisfy isAdmin() so they can post
+            // announcements, create sessions, etc. We don't hit the service
+            // layer here — we re-use the controller's own getGroup() which
+            // runs the same isAdmin() check the Announcements module uses.
+            ResponseEntity<?> transfer = controller.transferOwnership(groupId, authFor(alice),
+                Map.of("newOwnerUserId", charlie.getId().toString()));
+            assertThat(transfer.getStatusCode().is2xxSuccessful()).isTrue();
+
+            lenient().when(userRepository.findByEmail(charlie.getEmail())).thenReturn(Optional.of(charlie));
+            lenient().when(memberRepository.countByGroupIdAndMembershipStatus(eq(groupId), any()))
+                .thenReturn(2L);
+
+            ResponseEntity<?> viewAsNewOwner = controller.getGroup(groupId, authFor(charlie));
+            assertThat(viewAsNewOwner.getStatusCode().is2xxSuccessful()).isTrue();
+            Map<?, ?> body = (Map<?, ?>) viewAsNewOwner.getBody();
+            assertThat(body.get("isAdmin")).isEqualTo(true);
+        }
+
+        @Test
+        void demotedOwnerStillHasAdminRightsAfterTransfer() {
+            // The old owner is demoted from owner → admin but must keep
+            // management rights so they can still moderate the group.
+            controller.transferOwnership(groupId, authFor(alice),
+                Map.of("newOwnerUserId", charlie.getId().toString()));
+
+            lenient().when(memberRepository.countByGroupIdAndMembershipStatus(eq(groupId), any()))
+                .thenReturn(2L);
+
+            ResponseEntity<?> viewAsOldOwner = controller.getGroup(groupId, authFor(alice));
+            assertThat(viewAsOldOwner.getStatusCode().is2xxSuccessful()).isTrue();
+            Map<?, ?> body = (Map<?, ?>) viewAsOldOwner.getBody();
+            assertThat(body.get("isAdmin")).isEqualTo(true);
         }
 
         @Test
