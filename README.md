@@ -98,7 +98,7 @@ The main CI/CD workflow runs on pushes to `main` and on manual dispatch. It:
 - runs the Snyk dependency scan if configured
 - deploys the application to Azure Web App
 - runs Postman UAT against the deployed application
-- runs a lightweight k6 performance smoke test after Postman UAT
+- runs Postman UAT and a lightweight k6 performance smoke test after deployment
 
 Local testing is the fast way to catch build and test problems early. Pushing to GitHub verifies the full automation path, including repository secrets and variables, artifact passing between jobs, SonarCloud, Azure deployment, and post-deploy checks.
 
