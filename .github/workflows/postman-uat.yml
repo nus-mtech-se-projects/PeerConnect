@@ -24,22 +24,6 @@ jobs:
             echo "Missing workflow input base_url or repository variable AZURE_WEBAPP_URL"
             exit 1
           fi
-          if [ -z "${{ vars.AZURE_SQL_SERVER }}" ]; then
-            echo "Missing repository variable: AZURE_SQL_SERVER"
-            exit 1
-          fi
-          if [ -z "${{ vars.AZURE_SQL_DATABASE }}" ]; then
-            echo "Missing repository variable: AZURE_SQL_DATABASE"
-            exit 1
-          fi
-          if [ -z "${{ secrets.AZURE_SQL_USERNAME }}" ]; then
-            echo "Missing secret: AZURE_SQL_USERNAME"
-            exit 1
-          fi
-          if [ -z "${{ secrets.AZURE_SQL_PASSWORD }}" ]; then
-            echo "Missing secret: AZURE_SQL_PASSWORD"
-            exit 1
-          fi
 
       - name: Make scripts executable
         run: chmod +x .github/scripts/*.sh
