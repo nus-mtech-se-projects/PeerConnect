@@ -51,11 +51,11 @@ public class SessionReminderService {
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Singapore")
     public void sendUpcomingSessionReminders() {
         LocalDateTime now  = LocalDateTime.now();
-        // Window: start of tomorrow  →  end of the day after tomorrow
+        // Window: start of tomorrow  ->  end of the day after tomorrow
         LocalDateTime from = now.plusDays(1).toLocalDate().atStartOfDay();
         LocalDateTime to   = now.plusDays(2).toLocalDate().atTime(23, 59, 59);
 
-        log.info("Session reminder scheduler running. Window: {} → {}", from, to);
+        log.info("Session reminder scheduler running. Window: {} -> {}", from, to);
 
         String sql = """
                 SELECT b.first_name,
@@ -158,10 +158,10 @@ public class SessionReminderService {
             msg.setText(body.toString());
             mailSender.send(msg);
 
-            log.info("Reminder sent → {} | session: '{}'", toEmail, title);
+            log.info("Reminder sent -> {} | session: '{}'", toEmail, title);
 
         } catch (Exception e) {
-            log.error("Failed to send reminder → {} | session: '{}' | error: {}",
+            log.error("Failed to send reminder -> {} | session: '{}' | error: {}",
                     toEmail, title, e.getMessage());
         }
     }

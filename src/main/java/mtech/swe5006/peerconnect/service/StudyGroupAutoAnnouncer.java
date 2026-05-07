@@ -102,7 +102,7 @@ public class StudyGroupAutoAnnouncer {
         if (session.getStartsAt() != null) {
             String starts = formatSchedule(session.getStartsAt());
             if (session.getEndsAt() != null) {
-                lines.add("When: " + starts + " \u2192 " + formatSchedule(session.getEndsAt()));
+                lines.add("When: " + starts + " -> " + formatSchedule(session.getEndsAt()));
             } else {
                 lines.add("When: " + starts);
             }
@@ -149,7 +149,7 @@ public class StudyGroupAutoAnnouncer {
         String normalizedOld = normalize(oldValue);
         String normalizedNew = normalize(newValue);
         if (Objects.equals(normalizedOld, normalizedNew)) return;
-        lines.add(String.format("%s: %s \u2192 %s",
+        lines.add(String.format("%s: %s -> %s",
             label, displayValue(normalizedOld), displayValue(normalizedNew)));
     }
 
