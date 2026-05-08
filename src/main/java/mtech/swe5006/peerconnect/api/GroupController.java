@@ -157,7 +157,7 @@ public class GroupController {
     @GetMapping
     public ResponseEntity<?> getAllGroups(Authentication auth) {
         User currentUser = getCurrentUser(auth);
-        List<StudyGroup> groups = groupRepository.findTop100ByStatusInOrderByCreatedAtDesc(List.of(STATUS_ACTIVE, "full"));
+        List<StudyGroup> groups = groupRepository.findByStatusInOrderByCreatedAtDesc(List.of(STATUS_ACTIVE, "full"));
 
         // Batch-load all blocker IDs for the current user in ONE query, then filter in memory
         if (currentUser != null) {

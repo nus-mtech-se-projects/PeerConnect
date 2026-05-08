@@ -276,7 +276,7 @@ class GroupControllerTest {
             group2.setStatus("active");
 
             when(userRepository.findByEmail("alice@u.nus.edu")).thenReturn(Optional.of(alice));
-            when(groupRepository.findTop100ByStatusInOrderByCreatedAtDesc(List.of("active", "full")))
+            when(groupRepository.findByStatusInOrderByCreatedAtDesc(List.of("active", "full")))
                 .thenReturn(new ArrayList<>(List.of(group, group2)));
 
             // bob restricted alice — new batch approach: findByBlockedId(alice) returns bob's restriction entry
