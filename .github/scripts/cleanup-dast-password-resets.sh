@@ -10,8 +10,19 @@ escaped_email=$(printf "%s" "${DAST_USER_EMAIL}" | sed "s/'/''/g")
 
 docker run --rm \
   -v "$PWD:/work" \
-  mcr.microsoft.com/mssql-tools \
-  /opt/mssql-tools18/bin/sqlcmd \
+  mcr.microsoft.com/mssql-tools:latest \
+  /bin/sh -c '
+    set -e
+    if [ -x /opt/mssql-tools18/bin/sqlcmd ]; then
+      SQLCMD=/opt/mssql-tools18/bin/sqlcmd
+    elif [ -x /opt/mssql-tools/bin/sqlcmd ]; then
+      SQLCMD=/opt/mssql-tools/bin/sqlcmd
+    else
+      echo "sqlcmd not found in mssql-tools image" >&2
+      exit 127
+    fi
+    exec "$SQLCMD" "$@"
+  ' sqlcmd \
   -C \
   -S "${AZURE_SQL_SERVER}" \
   -d "${AZURE_SQL_DATABASE}" \

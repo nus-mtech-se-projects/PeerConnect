@@ -438,12 +438,17 @@ public class EmailService {
         return "Regards,\n" + ownerName + "\nGroup Owner\n\n" + SYS_FOOTER;
     }
 
-    /** Checks if the given email is in a blocked domain. */
+    /** Checks if the given email should not receive outbound email. */
     private boolean isBlockedEmail(String email) {
         if (email == null || email.isBlank() || !email.contains("@")) return false;
+        if (isGeneratedUatEmail(email)) return true;
         String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
         return BLOCKED_DOMAINS.contains(domain);
     }
 
-}
+    private boolean isGeneratedUatEmail(String email) {
+        String normalized = email.toLowerCase();
+        return normalized.matches("^(test|test2|tutor2)-\\d+@u\\.nus\\.edu\\.sg$");
+    }
 
+}

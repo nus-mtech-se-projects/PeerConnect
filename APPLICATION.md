@@ -421,6 +421,7 @@ Manual SQL migration scripts are stored in `data/migrations/`. Apply these to th
 |---|---|
 | `2026-03-17_create_peer_feedback.sql` | Creates the `peer_feedback` table |
 | `2026-03-21_repair_azure_sql_schema.sql` | Fixes Azure SQL schema for `peer_feedback` and `study_groups.preferred_schedule` |
+| `2026-04-27_add_study_group_auto_announce_enabled.sql` | Adds the `study_groups.auto_announce_enabled` column used by group queries |
 
 The application uses `spring.jpa.hibernate.ddl-auto=validate`, so the schema must be applied manually before the application starts.
 
