@@ -10,7 +10,15 @@ export const options = {
   },
 };
 
-const baseUrl = (__ENV.BASE_URL || '').replace(/\/$/, '');
+const baseUrl = (__ENV.BASE_URL || '').trim().replace(/\/$/, '');
+
+if (!baseUrl) {
+  throw new Error('BASE_URL is required for the k6 smoke test.');
+}
+
+if (!/^https?:\/\//.test(baseUrl)) {
+  throw new Error(`BASE_URL must start with http:// or https://. Received: ${baseUrl}`);
+}
 
 export default function () {
   const root = http.get(`${baseUrl}/`);

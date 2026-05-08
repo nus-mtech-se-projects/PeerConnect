@@ -265,6 +265,7 @@ jobs:
           K6_CLOUD_PROJECT_ID: ${{ env.K6_CLOUD_PROJECT_ID }}
         with:
           path: performance/smoke.js
+          flags: --env BASE_URL=${{ vars.AZURE_WEBAPP_URL }}
           cloud-run-locally: true
           cloud-comment-on-pr: false
 
@@ -275,3 +276,4 @@ jobs:
           BASE_URL: ${{ vars.AZURE_WEBAPP_URL }}
         with:
           path: performance/smoke.js
+          flags: --env BASE_URL=${{ vars.AZURE_WEBAPP_URL }}
