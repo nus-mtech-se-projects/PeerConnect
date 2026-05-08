@@ -158,6 +158,45 @@ class TutoringControllerTest {
             assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
             assertThat((List<?>) res.getBody()).hasSize(1);
         }
+
+        @Test
+        void userNotFoundReturns404() {
+            Authentication unknownAuth = mock(Authentication.class);
+            when(unknownAuth.getName()).thenReturn("nobody@u.nus.edu");
+            when(userRepository.findByEmail("nobody@u.nus.edu")).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.getAllClasses(unknownAuth);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "User not found"));
+            verify(tutoringClassRepository, never()).findAllByOrderByCreatedAtDesc();
+        }
+
+        @Test
+        void returnsPayloadWhenTutorLookupAndEnrollmentRepositoryFail() {
+            TutoringClass tc = new TutoringClass();
+            tc.setId(UUID.randomUUID());
+            tc.setTitle("Java Basics");
+            tc.setCreatedBy(alice.getId());
+
+            when(userRepository.findByEmail(alice.getEmail())).thenReturn(Optional.of(alice));
+            when(tutoringClassRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(tc));
+            when(userRepository.findById(alice.getId())).thenReturn(Optional.empty());
+            when(tutoringEnrollmentRepository.countByClassId(tc.getId())).thenThrow(new RuntimeException("count unavailable"));
+            when(tutoringEnrollmentRepository.findByClassIdAndUserId(tc.getId(), alice.getId()))
+                .thenThrow(new RuntimeException("lookup unavailable"));
+
+            ResponseEntity<?> res = controller.getAllClasses(authFor(alice));
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            Map<?, ?> payload = (Map<?, ?>) ((List<?>) res.getBody()).get(0);
+            assertThat(payload.get("isTutor")).isEqualTo(true);
+            assertThat(payload.get("enrolled")).isEqualTo(false);
+            assertThat(payload.get("enrolledCount")).isEqualTo(0L);
+            assertThat(payload.get("tutorName")).isNull();
+            assertThat(payload.get("tutorId")).isNull();
+            assertThat(payload.get("tutorEmail")).isNull();
+        }
     }
 
     @Nested
@@ -215,6 +254,67 @@ class TutoringControllerTest {
         }
 
         @Test
+        void missingScheduleReturns400() {
+            Map<String, Object> body = validCreateBody();
+            body.remove("schedule");
+
+            ResponseEntity<?> res = controller.createClass(authFor(alice), body);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(400);
+            assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Schedule is required");
+        }
+
+        @Test
+        void invalidModeReturns400() {
+            Map<String, Object> body = validCreateBody();
+            body.put("mode", "virtual");
+
+            ResponseEntity<?> res = controller.createClass(authFor(alice), body);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(400);
+            assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Mode must be one of: online, in-person, hybrid");
+        }
+
+        @Test
+        void missingLocationForInPersonReturns400() {
+            Map<String, Object> body = validCreateBody();
+            body.put("mode", "in-person");
+            body.remove("meetingLink");
+
+            ResponseEntity<?> res = controller.createClass(authFor(alice), body);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(400);
+            assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Location is required for in-person/hybrid classes");
+        }
+
+        @Test
+        void maxStudentsBelowOneReturns400() {
+            Map<String, Object> body = validCreateBody();
+            body.put("maxStudents", 0);
+
+            ResponseEntity<?> res = controller.createClass(authFor(alice), body);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(400);
+            assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Max students must be at least 1");
+        }
+
+        @Test
+        void inPersonClassCanBeCreatedWithoutMeetingLink() {
+            Map<String, Object> body = validCreateBody();
+            body.put("mode", "in-person");
+            body.put("location", "COM1-0208");
+            body.remove("meetingLink");
+
+            ResponseEntity<?> res = controller.createClass(authFor(alice), body);
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            Map<?, ?> payload = (Map<?, ?>) res.getBody();
+            assertThat(payload.get("mode")).isEqualTo("in-person");
+            assertThat(payload.get("location")).isEqualTo("COM1-0208");
+            assertThat(payload.get("meetingLink")).isNull();
+        }
+
+        @Test
         void userNotFoundReturns404() {
             Authentication unknownAuth = mock(Authentication.class);
             when(unknownAuth.getName()).thenReturn("nobody@u.nus.edu");
@@ -222,6 +322,41 @@ class TutoringControllerTest {
             ResponseEntity<?> res = controller.createClass(unknownAuth, validCreateBody());
             assertThat(res.getStatusCode().value()).isEqualTo(404);
             verify(emailService, never()).sendTutoringClassCreated(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void jpaSaveFailureFallsBackToJdbc() {
+            when(tutoringClassRepository.save(any())).thenThrow(new RuntimeException("jpa down"));
+
+            ResponseEntity<?> res = controller.createClass(authFor(alice), validCreateBody());
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            verify(jdbcTemplate).update(any(String.class), any(Object[].class));
+            verify(tutoringAuditFacade).classCreated(eq(alice), any(TutoringClass.class));
+        }
+
+        @Test
+        void jdbcFallbackFailureReturns500() {
+            when(tutoringClassRepository.save(any())).thenThrow(new RuntimeException("jpa down"));
+            when(jdbcTemplate.update(any(String.class), any(Object[].class)))
+                .thenThrow(new RuntimeException("jdbc down"));
+
+            ResponseEntity<?> res = controller.createClass(authFor(alice), validCreateBody());
+
+            assertThat(res.getStatusCode().value()).isEqualTo(500);
+            assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Failed to save tutoring class: jdbc down");
+            verify(tutoringAuditFacade, never()).classCreated(any(), any());
+        }
+
+        @Test
+        void emailFailureStillReturnsCreatedClass() {
+            doThrow(new RuntimeException("mail down")).when(emailService)
+                .sendTutoringClassCreated(any(), any(), any(), any(), any(), any(), any(), any(), any());
+
+            ResponseEntity<?> res = controller.createClass(authFor(alice), validCreateBody());
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            verify(tutoringAuditFacade).classCreated(eq(alice), any(TutoringClass.class));
         }
 
         private Map<String, Object> validCreateBody() {
@@ -364,6 +499,31 @@ class TutoringControllerTest {
             verify(tutoringClassRepository, never()).save(any());
             verify(emailService, never()).sendTutoringClassUpdated(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
+
+        @Test
+        void userNotFoundReturns404() {
+            Authentication unknownAuth = mock(Authentication.class);
+            when(unknownAuth.getName()).thenReturn("nobody@u.nus.edu");
+            when(userRepository.findByEmail("nobody@u.nus.edu")).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.updateClass(classId, unknownAuth, Map.of("title", "New"));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "User not found"));
+            verify(tutoringClassRepository, never()).save(any());
+        }
+
+        @Test
+        void emailFailureStillReturnsUpdatedClass() {
+            when(tutoringEnrollmentRepository.findByClassId(classId)).thenReturn(List.of());
+            doThrow(new RuntimeException("mail down")).when(emailService)
+                .sendTutoringClassUpdated(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+
+            ResponseEntity<?> res = controller.updateClass(classId, authFor(alice), Map.of("title", "Advanced Java II"));
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            assertThat(((Map<?, ?>) res.getBody()).get("title")).isEqualTo("Advanced Java II");
+        }
     }
 
     @Nested
@@ -451,6 +611,33 @@ class TutoringControllerTest {
             assertThat(res.getStatusCode().value()).isEqualTo(404);
             verify(emailService, never()).sendTutoringClassDeleted(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
+
+        @Test
+        void userNotFoundReturns404() {
+            Authentication unknownAuth = mock(Authentication.class);
+            when(unknownAuth.getName()).thenReturn("nobody@u.nus.edu");
+            when(userRepository.findByEmail("nobody@u.nus.edu")).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.deleteClass(classId, unknownAuth);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "User not found"));
+            verify(tutoringClassRepository, never()).delete(any());
+        }
+
+        @Test
+        void deleteContinuesWhenEnrollmentDeleteAndEmailFail() {
+            when(tutoringEnrollmentRepository.findByClassId(classId)).thenThrow(new RuntimeException("list unavailable"));
+            doThrow(new RuntimeException("delete unavailable")).when(tutoringEnrollmentRepository).deleteByClassId(classId);
+            doThrow(new RuntimeException("mail down")).when(emailService)
+                .sendTutoringClassDeleted(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+
+            ResponseEntity<?> res = controller.deleteClass(classId, authFor(alice));
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            assertThat(((Map<?, ?>) res.getBody()).get("deleted")).isEqualTo(true);
+            verify(tutoringClassRepository).delete(tutoringClass);
+        }
     }
 
     @Nested
@@ -531,6 +718,72 @@ class TutoringControllerTest {
             assertThat(((Map<?, ?>) res.getBody()).get("error")).isEqualTo("Tutoring class is full");
             verify(emailService, never()).sendTutoringEnrollmentConfirmed(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
         }
+
+        @Test
+        void userNotFoundReturns404() {
+            Authentication unknownAuth = mock(Authentication.class);
+            when(unknownAuth.getName()).thenReturn("nobody@u.nus.edu");
+            when(userRepository.findByEmail("nobody@u.nus.edu")).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.enroll(classId, unknownAuth);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "User not found"));
+        }
+
+        @Test
+        void classNotFoundReturns404() {
+            UUID unknownId = UUID.randomUUID();
+            when(tutoringClassRepository.findById(unknownId)).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.enroll(unknownId, authFor(alice));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "Tutoring class not found"));
+        }
+
+        @Test
+        void nullMaxStudentsAllowsEnrollmentWhenCountIsHigh() {
+            tutoringClass.setMaxStudents(null);
+            when(tutoringEnrollmentRepository.findByClassIdAndUserId(classId, alice.getId()))
+                .thenReturn(Optional.empty());
+            when(tutoringEnrollmentRepository.countByClassId(classId)).thenReturn(99L);
+            when(userRepository.findById(bob.getId())).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.enroll(classId, authFor(alice));
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            assertThat(((Map<?, ?>) res.getBody()).get("enrolledCount")).isEqualTo(100L);
+            verify(emailService).sendTutoringEnrollmentConfirmed(
+                eq("alice@u.nus.edu"),
+                eq("Alice Tan"),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull()
+            );
+        }
+
+        @Test
+        void enrollmentStillSucceedsWhenSaveAndEmailFail() {
+            when(tutoringEnrollmentRepository.findByClassIdAndUserId(classId, alice.getId()))
+                .thenReturn(Optional.empty());
+            when(tutoringEnrollmentRepository.countByClassId(classId)).thenReturn(1L);
+            doThrow(new RuntimeException("save unavailable")).when(tutoringEnrollmentRepository).save(any(TutoringEnrollment.class));
+            when(userRepository.findById(bob.getId())).thenReturn(Optional.of(bob));
+            doThrow(new RuntimeException("mail down")).when(emailService)
+                .sendTutoringEnrollmentConfirmed(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+
+            ResponseEntity<?> res = controller.enroll(classId, authFor(alice));
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            assertThat(((Map<?, ?>) res.getBody()).get("enrolled")).isEqualTo(true);
+        }
     }
 
     @Nested
@@ -565,6 +818,52 @@ class TutoringControllerTest {
         void nonTutorCannotViewFeedbackReturns403() {
             ResponseEntity<?> res = controller.getClassFeedback(classId, authFor(bob));
             assertThat(res.getStatusCode().value()).isEqualTo(403);
+        }
+
+        @Test
+        void authenticationRequiredReturns401() {
+            ResponseEntity<?> res = controller.getClassFeedback(classId, null);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(401);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "Authentication required"));
+        }
+
+        @Test
+        void classNotFoundReturns404() {
+            UUID unknownId = UUID.randomUUID();
+            when(tutoringClassRepository.findById(unknownId)).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.getClassFeedback(unknownId, authFor(alice));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "Tutoring class not found"));
+        }
+
+        @Test
+        void mapsFeedbackWithNullIdentifiersAndMissingUsers() {
+            PeerFeedback feedback = new PeerFeedback();
+            feedback.setOverallRating((short) 4);
+            feedback.setPreparedness((short) 3);
+            feedback.setCommunication((short) 5);
+            feedback.setHelpfulness((short) 4);
+            feedback.setReliability((short) 4);
+            feedback.setAnonymousToPeer(null);
+
+            when(peerFeedbackRepository.findByPeerTutorGroupIdOrderByCreatedAtDesc(classId))
+                .thenReturn(List.of(feedback));
+
+            ResponseEntity<?> res = controller.getClassFeedback(classId, authFor(alice));
+
+            assertThat(res.getStatusCode().is2xxSuccessful()).isTrue();
+            Map<?, ?> row = (Map<?, ?>) ((List<?>) res.getBody()).get(0);
+            assertThat(row.get("id")).isNull();
+            assertThat(row.get("peerTutorGroupId")).isNull();
+            assertThat(row.get("sessionId")).isNull();
+            assertThat(row.get("revieweeId")).isNull();
+            assertThat(row.get("revieweeName")).isNull();
+            assertThat(row.get("reviewerName")).isNull();
+            assertThat(row.get("reviewerEmail")).isNull();
+            assertThat(row.get("anonymousToPeer")).isEqualTo(false);
         }
     }
 
@@ -619,6 +918,74 @@ class TutoringControllerTest {
             body.remove("helpfulness");
             ResponseEntity<?> res = controller.submitFeedback(classId, authFor(alice), body);
             assertThat(res.getStatusCode().value()).isEqualTo(400);
+            verify(peerFeedbackRepository, never()).save(any());
+        }
+
+        @Test
+        void authenticationRequiredReturns401() {
+            ResponseEntity<?> res = controller.submitFeedback(classId, null, validFeedbackBody(bob.getId()));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(401);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "Authentication required"));
+            verify(peerFeedbackRepository, never()).save(any());
+        }
+
+        @Test
+        void classNotFoundReturns404() {
+            UUID unknownId = UUID.randomUUID();
+            when(tutoringClassRepository.findById(unknownId)).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.submitFeedback(unknownId, authFor(alice), validFeedbackBody(bob.getId()));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "Tutoring class not found"));
+            verify(peerFeedbackRepository, never()).save(any());
+        }
+
+        @Test
+        void notEnrolledReviewerReturns403() {
+            when(tutoringEnrollmentRepository.findByClassIdAndUserId(classId, alice.getId())).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.submitFeedback(classId, authFor(alice), validFeedbackBody(bob.getId()));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(403);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "Only enrolled students can submit feedback"));
+            verify(peerFeedbackRepository, never()).save(any());
+        }
+
+        @Test
+        void missingRevieweeIdReturns400() {
+            Map<String, Object> body = validFeedbackBody(bob.getId());
+            body.remove("revieweeId");
+
+            ResponseEntity<?> res = controller.submitFeedback(classId, authFor(alice), body);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(400);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "revieweeId is required"));
+            verify(peerFeedbackRepository, never()).save(any());
+        }
+
+        @Test
+        void invalidRevieweeIdReturns400() {
+            Map<String, Object> body = validFeedbackBody(bob.getId());
+            body.put("revieweeId", "not-a-uuid");
+
+            ResponseEntity<?> res = controller.submitFeedback(classId, authFor(alice), body);
+
+            assertThat(res.getStatusCode().value()).isEqualTo(400);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "Invalid revieweeId format"));
+            verify(peerFeedbackRepository, never()).save(any());
+        }
+
+        @Test
+        void unknownRevieweeReturns404() {
+            UUID unknownReviewee = UUID.randomUUID();
+            when(userRepository.findById(unknownReviewee)).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.submitFeedback(classId, authFor(alice), validFeedbackBody(unknownReviewee));
+
+            assertThat(res.getStatusCode().value()).isEqualTo(404);
+            assertThat(res.getBody()).isEqualTo(Map.of("error", "Reviewee not found"));
             verify(peerFeedbackRepository, never()).save(any());
         }
     }
@@ -722,6 +1089,28 @@ class TutoringControllerTest {
             assertThat(response.getStatusCode().value()).isEqualTo(404);
             assertThat(response.getBody()).isEqualTo(Map.of("error", "User not found"));
             verify(emailService, never()).sendTutoringStudentLeft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void leaveStillSucceedsWhenDeleteAndEmailFail() {
+            TutoringEnrollment enrollment = new TutoringEnrollment();
+            enrollment.setClassId(classId);
+            enrollment.setUserId(alice.getId());
+
+            when(tutoringEnrollmentRepository.findByClassIdAndUserId(classId, alice.getId()))
+                .thenReturn(Optional.of(enrollment));
+            when(tutoringEnrollmentRepository.countByClassId(classId)).thenThrow(new RuntimeException("count unavailable"));
+            doThrow(new RuntimeException("delete unavailable")).when(tutoringEnrollmentRepository)
+                .deleteByClassIdAndUserId(classId, alice.getId());
+            when(userRepository.findById(bob.getId())).thenReturn(Optional.empty());
+            doThrow(new RuntimeException("mail down")).when(emailService)
+                .sendTutoringStudentLeft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+
+            ResponseEntity<?> response = controller.leave(classId, authFor(alice));
+
+            assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+            assertThat(((Map<?, ?>) response.getBody()).get("enrolledCount")).isEqualTo(0L);
+            verify(tutoringAuditFacade).classLeft(alice, classId, 0L);
         }
     }
 
