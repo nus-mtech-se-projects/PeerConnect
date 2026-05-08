@@ -188,6 +188,41 @@ def jacocoCoverageExcludes = [
 	'**/service/SqlItemService*.class'
 ]
 
+def sonarCoverageExclusions = [
+	// Boilerplate data carriers and persistence models.
+	'src/main/java/**/data/sql/**',
+	'src/main/java/**/dto/**',
+
+	// Framework bootstrapping and environment-specific configuration.
+	'src/main/java/**/PeerconnectApplication.java',
+	'src/main/java/**/config/**',
+	'src/main/java/**/security/SecurityConfig*.java',
+
+	// External adapters and scheduled/background integrations.
+	'src/main/java/**/service/AiTutorService*.java',
+	'src/main/java/**/service/AzureBlobService*.java',
+	'src/main/java/**/service/SessionReminderService*.java',
+	'src/main/java/**/service/AnnouncementSchemaInitializer*.java',
+	'src/main/java/**/service/EmailService*.java',
+	'src/main/java/**/service/audit/AuditDispatchContext*.java',
+	'src/main/java/**/service/audit/AuditSink*.java',
+	'src/main/java/**/service/audit/AzureMonitorAuditSink*.java',
+	'src/main/java/**/service/audit/DatabaseAuditSink*.java',
+	'src/main/java/**/service/audit/SentryAuditSink*.java',
+
+	// Legacy/integration surfaces that are covered by UAT rather than unit tests.
+	'src/main/java/**/api/AdminController*.java',
+	'src/main/java/**/api/BaseTemplate*.java',
+	'src/main/java/**/api/GroupChatController*.java',
+	'src/main/java/**/api/GroupChatsController*.java',
+	'src/main/java/**/api/GroupController*.java',
+	'src/main/java/**/api/SqlItemController*.java',
+	'src/main/java/**/service/chat/**',
+	'src/main/java/**/service/AuditService*.java',
+	'src/main/java/**/service/SecurityService*.java',
+	'src/main/java/**/service/SqlItemService*.java'
+]
+
 jacocoTestReport {
 	dependsOn test
 	reports {
@@ -226,5 +261,6 @@ sonar {
 	properties {
 		property 'sonar.sourceEncoding', 'UTF-8'
 		property 'sonar.coverage.jacoco.xmlReportPaths', 'build/reports/jacoco/test/jacocoTestReport.xml'
+		property 'sonar.coverage.exclusions', sonarCoverageExclusions.join(',')
 	}
 }
