@@ -157,7 +157,7 @@ public class GroupController {
     @GetMapping
     public ResponseEntity<?> getAllGroups(Authentication auth) {
         User currentUser = getCurrentUser(auth);
-        List<StudyGroup> groups = groupRepository.findTop100ByStatusInOrderByCreatedAtDesc(List.of(STATUS_ACTIVE, "full"));
+        List<StudyGroup> groups = findDiscoverableGroups();
 
         // Batch-load all blocker IDs for the current user in ONE query, then filter in memory
         if (currentUser != null) {
@@ -177,9 +177,7 @@ public class GroupController {
         List<UUID> groupIds = groups.stream().map(StudyGroup::getId).toList();
 
         // Batch-load ALL members for all groups in ONE query
-        List<StudyGroupMember> allMembers = groupIds.isEmpty()
-            ? List.of()
-            : groupMemberRepository.findByGroupIdIn(groupIds);
+        List<StudyGroupMember> allMembers = groupIds.isEmpty() ? List.of() : findMembersByGroupIds(groupIds);
 
         // Aggregate counts and current-user memberships from the batch, no DB calls
         Map<UUID, Long> approvedCounts = new HashMap<>();
@@ -203,7 +201,7 @@ public class GroupController {
             .filter(g -> g.getCreatedBy() != null)
             .map(StudyGroup::getCreatedBy)
             .collect(Collectors.toSet());
-        Map<UUID, User> ownerMap = userRepository.findAllById(ownerIds).stream()
+        Map<UUID, User> ownerMap = findUsersByIds(ownerIds).stream()
             .collect(Collectors.toMap(User::getId, u -> u));
 
         List<Map<String, Object>> payload = groups.stream()
@@ -1017,6 +1015,77 @@ public class GroupController {
 
     private User getCurrentUser(Authentication auth) {
         return resolveUser(auth, userRepository);
+    }
+
+    private List<StudyGroup> findDiscoverableGroups() {
+        try {
+            return groupRepository.findTop100ByStatusInOrderByCreatedAtDesc(List.of(STATUS_ACTIVE, "full"));
+        } catch (Exception ex) {
+            log.warn("[AllGroups] JPA discovery query failed, retrying with JDBC fallback: {}", ex.getMessage());
+            try {
+                return jdbcTemplate.query(
+                    """
+                    SELECT TOP (100)
+                        id, topic, name, module_code, description, meeting_link, preferred_schedule,
+                        study_mode, location, created_by, max_members, status, created_at
+                    FROM dbo.study_groups
+                    WHERE status IN (?, ?)
+                    ORDER BY created_at DESC
+                    """,
+                    (rs, rowNum) -> {
+                        StudyGroup group = new StudyGroup();
+                        group.setId(parseUuid(rs.getObject("id")));
+                        group.setTopic(rs.getString("topic"));
+                        group.setName(rs.getString("name"));
+                        group.setModuleCode(rs.getString("module_code"));
+                        group.setDescription(rs.getString("description"));
+                        group.setMeetingLink(rs.getString("meeting_link"));
+                        group.setPreferredSchedule(rs.getTimestamp("preferred_schedule") != null
+                            ? rs.getTimestamp("preferred_schedule").toLocalDateTime()
+                            : null);
+                        group.setStudyMode(rs.getString("study_mode"));
+                        group.setLocation(rs.getString("location"));
+                        group.setCreatedBy(parseUuid(rs.getObject("created_by")));
+                        short maxMembers = rs.getShort("max_members");
+                        group.setMaxMembers(rs.wasNull() ? null : maxMembers);
+                        group.setStatus(rs.getString("status"));
+                        group.setCreatedAt(rs.getTimestamp("created_at") != null
+                            ? rs.getTimestamp("created_at").toLocalDateTime()
+                            : null);
+                        return group;
+                    },
+                    STATUS_ACTIVE,
+                    "full"
+                );
+            } catch (Exception fallbackEx) {
+                log.error("[AllGroups] JDBC discovery fallback failed: {}", fallbackEx.getMessage(), fallbackEx);
+                return List.of();
+            }
+        }
+    }
+
+    private List<StudyGroupMember> findMembersByGroupIds(List<UUID> groupIds) {
+        try {
+            return groupMemberRepository.findByGroupIdIn(groupIds);
+        } catch (Exception ex) {
+            log.warn("[AllGroups] Falling back to empty membership summaries: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<User> findUsersByIds(Set<UUID> userIds) {
+        try {
+            return userRepository.findAllById(userIds);
+        } catch (Exception ex) {
+            log.warn("[AllGroups] Falling back to empty owner summaries: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private UUID parseUuid(Object value) {
+        if (value == null) return null;
+        if (value instanceof UUID uuid) return uuid;
+        return UUID.fromString(String.valueOf(value));
     }
 
     private boolean isOwner(StudyGroup group, UUID userId) {

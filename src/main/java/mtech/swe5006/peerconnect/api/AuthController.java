@@ -379,17 +379,25 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, Object> body) {
     prt.setUserId(user.getId());
     prt.setToken(code);
     prt.setExpiry(LocalDateTime.now().plusMinutes(15));
-    resetTokenRepository.save(prt);
+    try {
+      resetTokenRepository.save(prt);
+    } catch (Exception ex) {
+      log.error("[PasswordVerification] Failed to persist verification code for {}: {}", user.getEmail(), ex.getMessage());
+    }
     return code;
   }
 
   /** Mark every unused reset-token for the given user as used. */
   private void invalidateUnusedTokens(User user) {
-    var unusedTokens = resetTokenRepository.findByUserIdAndUsedAtIsNull(user.getId());
-    if (!unusedTokens.isEmpty()) {
-      LocalDateTime now = LocalDateTime.now();
-      unusedTokens.forEach(t -> t.setUsedAt(now));
-      resetTokenRepository.saveAll(unusedTokens);
+    try {
+      var unusedTokens = resetTokenRepository.findByUserIdAndUsedAtIsNull(user.getId());
+      if (!unusedTokens.isEmpty()) {
+        LocalDateTime now = LocalDateTime.now();
+        unusedTokens.forEach(t -> t.setUsedAt(now));
+        resetTokenRepository.saveAll(unusedTokens);
+      }
+    } catch (Exception ex) {
+      log.warn("[PasswordVerification] Failed to invalidate unused tokens for {}: {}", user.getEmail(), ex.getMessage());
     }
   }
 
@@ -402,9 +410,14 @@ public ResponseEntity<?> microsoftLogin(@RequestBody Map<String, Object> body) {
     if (newPassword == null || newPassword.length() < 6) {
       return ResponseEntity.badRequest().body("Password must be at least 6 characters.");
     }
-    var tokenOpt = resetTokenRepository
-        .findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
-            user.getId(), code.trim(), LocalDateTime.now());
+    var tokenOpt = java.util.Optional.<PasswordResetToken>empty();
+    try {
+      tokenOpt = resetTokenRepository
+          .findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
+              user.getId(), code.trim(), LocalDateTime.now());
+    } catch (Exception ex) {
+      log.warn("[PasswordVerification] Failed to verify token for {}: {}", user.getEmail(), ex.getMessage());
+    }
     if (tokenOpt.isEmpty()) {
       return ResponseEntity.badRequest().body("Invalid or expired code.");
     }
