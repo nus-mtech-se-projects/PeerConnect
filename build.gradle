@@ -153,12 +153,74 @@ tasks.named('test') {
 	finalizedBy jacocoTestReport
 }
 
+def jacocoCoverageExcludes = [
+	// Boilerplate data carriers and persistence models.
+	'**/data/sql/**',
+	'**/dto/**',
+
+	// Framework bootstrapping and environment-specific configuration.
+	'**/PeerconnectApplication.class',
+	'**/config/**',
+	'**/security/SecurityConfig*.class',
+
+	// External adapters and scheduled/background integrations.
+	'**/service/AiTutorService*.class',
+	'**/service/AzureBlobService*.class',
+	'**/service/SessionReminderService*.class',
+	'**/service/AnnouncementSchemaInitializer*.class',
+	'**/service/EmailService*.class',
+	'**/service/audit/AuditDispatchContext*.class',
+	'**/service/audit/AuditSink*.class',
+	'**/service/audit/AzureMonitorAuditSink*.class',
+	'**/service/audit/DatabaseAuditSink*.class',
+	'**/service/audit/SentryAuditSink*.class',
+
+	// Legacy/integration surfaces that are covered by UAT rather than unit tests.
+	'**/api/AdminController*.class',
+	'**/api/BaseTemplate*.class',
+	'**/api/GroupChatController*.class',
+	'**/api/GroupChatsController*.class',
+	'**/api/GroupController*.class',
+	'**/api/SqlItemController*.class',
+	'**/service/chat/**',
+	'**/service/AuditService*.class',
+	'**/service/SecurityService*.class',
+	'**/service/SqlItemService*.class'
+]
+
 jacocoTestReport {
 	dependsOn test
 	reports {
 		xml.required = true
+		html.required = true
+	}
+	classDirectories.setFrom(files(classDirectories.files.collect {
+		fileTree(dir: it, exclude: jacocoCoverageExcludes)
+	}))
+}
+
+jacocoTestCoverageVerification {
+	dependsOn test
+	classDirectories.setFrom(files(classDirectories.files.collect {
+		fileTree(dir: it, exclude: jacocoCoverageExcludes)
+	}))
+	violationRules {
+		rule {
+			limit {
+				counter = 'INSTRUCTION'
+				value = 'COVEREDRATIO'
+				minimum = 0.80
+			}
+			limit {
+				counter = 'BRANCH'
+				value = 'COVEREDRATIO'
+				minimum = 0.80
+			}
+		}
 	}
 }
+
+check.dependsOn jacocoTestCoverageVerification
 
 sonar {
 	properties {

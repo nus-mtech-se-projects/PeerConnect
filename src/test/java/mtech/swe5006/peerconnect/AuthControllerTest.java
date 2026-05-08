@@ -91,6 +91,16 @@ class AuthControllerTest {
         }
     }
 
+    private void setEmailCooldownSeconds(long seconds) {
+        try {
+            Field field = AuthController.class.getDeclaredField("EMAIL_COOLDOWN_SECONDS");
+            field.setAccessible(true);
+            field.setLong(controller, seconds);
+        } catch (ReflectiveOperationException ex) {
+            throw new RuntimeException("Failed to set AuthController email cooldown for tests", ex);
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // POST /api/auth/register
     // ════════════════════════════════════════════════════════════════════
@@ -662,6 +672,65 @@ class AuthControllerTest {
         }
 
         @Test
+        void forgotPassword_missingIdentifierReturns400() {
+            ResponseEntity<?> res = controller.forgotPassword(
+                    new AuthController.ForgotPasswordRequest(" ", null));
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(res.getBody()).isEqualTo("Provide email or NUS Student ID.");
+            verify(resetTokenRepository, never()).save(any());
+            verify(emailService, never()).sendResetCode(anyString(), anyString());
+        }
+
+        @Test
+        void forgotPassword_unknownUserReturns400() {
+            when(userRepository.findByNusStudentId("A9999999Z")).thenReturn(Optional.empty());
+
+            ResponseEntity<?> res = controller.forgotPassword(
+                    new AuthController.ForgotPasswordRequest(null, "A9999999Z"));
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(res.getBody()).isEqualTo("Account does not exist. Please verify the email or NUS Student ID.");
+            verify(resetTokenRepository, never()).save(any());
+        }
+
+        @Test
+        void forgotPassword_secondRequestWithinCooldownReturns429() {
+            setEmailCooldownSeconds(120);
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+
+            ResponseEntity<?> first = controller.forgotPassword(
+                    new AuthController.ForgotPasswordRequest(savedUser.getEmail(), null));
+            ResponseEntity<?> second = controller.forgotPassword(
+                    new AuthController.ForgotPasswordRequest(savedUser.getEmail(), null));
+
+            assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(second.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+            verify(emailService, times(1)).sendResetCode(eq(savedUser.getEmail()), anyString());
+        }
+
+        @Test
+        void forgotPassword_returnsOkWhenEmailSendFails() {
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+            doThrow(new RuntimeException("smtp down")).when(emailService).sendResetCode(eq(savedUser.getEmail()), anyString());
+
+            ResponseEntity<?> res = controller.forgotPassword(
+                    new AuthController.ForgotPasswordRequest(savedUser.getEmail(), null));
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(auditService).record(
+                    eq("PASSWORD_RESET_REQUESTED"),
+                    eq(savedUser.getId()),
+                    eq(savedUser.getEmail()),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    argThat(details -> "forgot_password".equals(details.get("flow"))));
+        }
+
+        @Test
         void resetPassword_recordsAuditEvent() {
             PasswordResetToken token = new PasswordResetToken();
             token.setUserId(savedUser.getId());
@@ -691,10 +760,133 @@ class AuthControllerTest {
         }
 
         @Test
+        void resetPassword_invalidInputsReturn400() {
+            ResponseEntity<?> missingIdentifier = controller.resetPassword(
+                    new AuthController.ResetPasswordRequest(null, "", "123456", "new-pass"));
+            assertThat(missingIdentifier.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(missingIdentifier.getBody()).isEqualTo("Provide email or NUS Student ID.");
+
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+            ResponseEntity<?> missingCode = controller.resetPassword(
+                    new AuthController.ResetPasswordRequest(savedUser.getEmail(), null, " ", "new-pass"));
+            assertThat(missingCode.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(missingCode.getBody()).isEqualTo("Verification code is required.");
+
+            ResponseEntity<?> shortPassword = controller.resetPassword(
+                    new AuthController.ResetPasswordRequest(savedUser.getEmail(), null, "123456", "12345"));
+            assertThat(shortPassword.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(shortPassword.getBody()).isEqualTo("Password must be at least 6 characters.");
+        }
+
+        @Test
+        void resetPassword_unknownUserOrInvalidTokenReturns400() {
+            when(userRepository.findByNusStudentId(savedUser.getNusStudentId())).thenReturn(Optional.empty());
+            ResponseEntity<?> unknownUser = controller.resetPassword(
+                    new AuthController.ResetPasswordRequest(null, savedUser.getNusStudentId(), "123456", "new-pass"));
+            assertThat(unknownUser.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(unknownUser.getBody()).isEqualTo("Invalid request.");
+
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+            when(resetTokenRepository.findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
+                    eq(savedUser.getId()), eq("000000"), any(LocalDateTime.class)))
+                    .thenReturn(Optional.empty());
+
+            ResponseEntity<?> invalidToken = controller.resetPassword(
+                    new AuthController.ResetPasswordRequest(savedUser.getEmail(), null, "000000", "new-pass"));
+            assertThat(invalidToken.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(invalidToken.getBody()).isEqualTo("Invalid or expired code.");
+            verify(userRepository, never()).save(any(User.class));
+        }
+
+        @Test
+        void resetPassword_marksUnusedTokensAsUsed() {
+            PasswordResetToken submittedToken = new PasswordResetToken();
+            submittedToken.setUserId(savedUser.getId());
+            submittedToken.setToken("123456");
+            PasswordResetToken otherToken = new PasswordResetToken();
+            otherToken.setUserId(savedUser.getId());
+            otherToken.setToken("222222");
+
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+            when(resetTokenRepository.findByUserIdAndTokenAndUsedAtIsNullAndExpiryAfter(
+                    eq(savedUser.getId()), eq("123456"), any(LocalDateTime.class)))
+                    .thenReturn(Optional.of(submittedToken));
+            when(resetTokenRepository.findByUserIdAndUsedAtIsNull(savedUser.getId()))
+                    .thenReturn(java.util.List.of(submittedToken, otherToken));
+            when(passwordEncoder.encode("new-pass")).thenReturn("new-hash");
+
+            ResponseEntity<?> res = controller.resetPassword(
+                    new AuthController.ResetPasswordRequest(savedUser.getEmail(), null, "123456", "new-pass"));
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(submittedToken.getUsedAt()).isNotNull();
+            assertThat(otherToken.getUsedAt()).isNotNull();
+            verify(resetTokenRepository).saveAll(java.util.List.of(submittedToken, otherToken));
+        }
+
+        @Test
         void changePasswordRequest_recordsAuditEvent() {
             when(jwtService.isValid("token")).thenReturn(true);
             when(jwtService.extractUsername("token")).thenReturn(savedUser.getEmail());
             when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+
+            ResponseEntity<?> res = controller.changePasswordRequest("Bearer token");
+
+            assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+            verify(auditService).record(
+                    eq("PASSWORD_CHANGE_REQUESTED"),
+                    eq(savedUser.getId()),
+                    eq(savedUser.getEmail()),
+                    eq("USER"),
+                    eq(savedUser.getId()),
+                    eq("SUCCESS"),
+                    isNull(),
+                    isNull(),
+                    argThat(details -> "change_password".equals(details.get("flow"))));
+        }
+
+        @Test
+        void changePasswordRequest_requiresValidAuthAndExistingUser() {
+            ResponseEntity<?> missingAuth = controller.changePasswordRequest(null);
+            assertThat(missingAuth.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+            assertThat(missingAuth.getBody()).isEqualTo("Authentication required.");
+
+            ResponseEntity<?> malformedAuth = controller.changePasswordRequest("Token abc");
+            assertThat(malformedAuth.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            when(jwtService.isValid("bad")).thenReturn(false);
+            ResponseEntity<?> invalidJwt = controller.changePasswordRequest("Bearer bad");
+            assertThat(invalidJwt.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            when(jwtService.isValid("valid")).thenReturn(true);
+            when(jwtService.extractUsername("valid")).thenReturn("missing@u.nus.edu");
+            when(userRepository.findByEmail("missing@u.nus.edu")).thenReturn(Optional.empty());
+            ResponseEntity<?> missingUser = controller.changePasswordRequest("Bearer valid");
+            assertThat(missingUser.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(missingUser.getBody()).isEqualTo("User not found.");
+        }
+
+        @Test
+        void changePasswordRequest_secondRequestWithinCooldownReturns429() {
+            setEmailCooldownSeconds(120);
+            when(jwtService.isValid("token")).thenReturn(true);
+            when(jwtService.extractUsername("token")).thenReturn(savedUser.getEmail());
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+
+            ResponseEntity<?> first = controller.changePasswordRequest("Bearer token");
+            ResponseEntity<?> second = controller.changePasswordRequest("Bearer token");
+
+            assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(second.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+            verify(emailService, times(1)).sendChangePasswordCode(eq(savedUser.getEmail()), anyString());
+        }
+
+        @Test
+        void changePasswordRequest_returnsOkWhenEmailSendFails() {
+            when(jwtService.isValid("token")).thenReturn(true);
+            when(jwtService.extractUsername("token")).thenReturn(savedUser.getEmail());
+            when(userRepository.findByEmail(savedUser.getEmail())).thenReturn(Optional.of(savedUser));
+            doThrow(new RuntimeException("smtp down")).when(emailService).sendChangePasswordCode(eq(savedUser.getEmail()), anyString());
 
             ResponseEntity<?> res = controller.changePasswordRequest("Bearer token");
 
@@ -755,6 +947,26 @@ class AuthControllerTest {
                     isNull(),
                     isNull(),
                     eq(Map.of()));
+        }
+
+        @Test
+        void changePasswordConfirm_requiresValidAuthAndExistingUser() {
+            ResponseEntity<?> missingAuth = controller.changePasswordConfirm(
+                    new AuthController.ChangePasswordRequest("123456", "new-pass"), null);
+            assertThat(missingAuth.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            when(jwtService.isValid("bad")).thenReturn(false);
+            ResponseEntity<?> invalidJwt = controller.changePasswordConfirm(
+                    new AuthController.ChangePasswordRequest("123456", "new-pass"), "Bearer bad");
+            assertThat(invalidJwt.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+            when(jwtService.isValid("valid")).thenReturn(true);
+            when(jwtService.extractUsername("valid")).thenReturn("missing@u.nus.edu");
+            when(userRepository.findByEmail("missing@u.nus.edu")).thenReturn(Optional.empty());
+            ResponseEntity<?> missingUser = controller.changePasswordConfirm(
+                    new AuthController.ChangePasswordRequest("123456", "new-pass"), "Bearer valid");
+            assertThat(missingUser.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertThat(missingUser.getBody()).isEqualTo("User not found.");
         }
     }
 }
